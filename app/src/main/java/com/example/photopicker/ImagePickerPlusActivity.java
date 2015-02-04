@@ -166,14 +166,11 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
         t.start();
 
         mHandler = new Handler(getMainLooper()) {
-            private android.graphics.Matrix matrix = new android.graphics.Matrix();
             @Override
             public void handleMessage(Message msg) {
                 ImageView imgView = (ImageView) msg.obj;
                 Bitmap b = msg.getData().getParcelable("bitmap");
                 Long msgId = msg.getData().getLong("imgId");
-                String oriFilePath = msg.getData().getString("oriFilePath");
-                String orientation = msg.getData().getString("orientation");
                 Long nowMsgId = (Long) imgView.getTag();
                 if (msgId.longValue() == nowMsgId.longValue()) {
                     if(null != b){
@@ -182,8 +179,9 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
                         imgView.setImageDrawable(null);
                     }
                 } else {
-                    LogUtil.w(TAG, "last tag imgId != now tag imgId");
-                    t.addTask(oriFilePath, imgView, nowMsgId, orientation);
+                    LogUtil.w(TAG, "last tag imgId != now tag imgId, 重新排序");
+                    imgView.setImageDrawable(null);
+                    t.addTask(null, imgView, null, null);
                 }
             }
         };
@@ -589,12 +587,13 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
         }
 
         public void addTask(String filePath, ImageView imgView, Long imgId, String orientation) {
-            if (filePath != null && imgView != null && imgId != null) {
+            if (imgView != null) {
                 synchronized (imgView) {
-                    LogUtil.w(TAG, "add tag   " + imgId + "_" + filePath + "_" + orientation);
-                    imgView.setTag(imgId);
-                    imgView.setTag(R.string.view_tag_key, filePath);
-                    imgView.setTag(R.string.view_tag_key2, orientation);
+                    if(null != filePath && null != imgId && null != orientation){
+                        imgView.setTag(imgId);
+                        imgView.setTag(R.string.view_tag_key, filePath);
+                        imgView.setTag(R.string.view_tag_key2, orientation);
+                    }
                 }
                 if (imgViews.contains(imgView)) {
                     imgViews.remove(imgView);
@@ -668,11 +667,6 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
                     Bundle bundle = new Bundle();
                     bundle.putParcelable("bitmap", b);
                     bundle.putLong("imgId", imgId);
-                    bundle.putString("oriFilePath", tagFilePath);
-                    bundle.putString("orientation", orientation);
-
-                    LogUtil.e(TAG, imgId + "_" + tagFilePath + "_" + orientation);
-
                     if (b != null) {
                         int o = Integer.parseInt(orientation);
                         if (o > 0 && o < 360) {
@@ -684,7 +678,6 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
                     } else {
                         LogUtil.e(TAG, "get small bitmap fail ! " + b);
                     }
-
                     Message msg = mHandler.obtainMessage(0, imgView);
                     msg.setData(bundle);
                     msg.sendToTarget();
