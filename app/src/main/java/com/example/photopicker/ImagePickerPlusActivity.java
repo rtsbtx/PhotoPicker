@@ -591,6 +591,7 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
         public void addTask(String filePath, ImageView imgView, Long imgId, String orientation) {
             if (filePath != null && imgView != null && imgId != null) {
                 synchronized (imgView) {
+                    LogUtil.w(TAG, "add tag   " + imgId + "_" + filePath + "_" + orientation);
                     imgView.setTag(imgId);
                     imgView.setTag(R.string.view_tag_key, filePath);
                     imgView.setTag(R.string.view_tag_key2, orientation);
