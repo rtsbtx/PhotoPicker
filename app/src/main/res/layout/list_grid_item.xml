@@ -22,7 +22,7 @@
             android:background="#ffffff"
             android:cropToPadding="true"
             android:padding="2dp"
-            android:scaleType="centerCrop" />
+            android:scaleType="matrix" />
         
         <TextView android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -101,7 +101,7 @@
             android:background="#ffffff"
             android:cropToPadding="true"
             android:padding="2dp"
-            android:scaleType="centerCrop" />
+            android:scaleType="matrix" />
         
         <TextView android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -180,7 +180,7 @@
             android:background="#ffffff"
             android:cropToPadding="true"
             android:padding="2dp"
-            android:scaleType="centerCrop" />
+            android:scaleType="matrix" />
         
         <TextView android:layout_width="wrap_content"
             android:layout_height="wrap_content"
