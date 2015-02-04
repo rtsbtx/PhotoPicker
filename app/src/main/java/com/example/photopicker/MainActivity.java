@@ -19,7 +19,6 @@ public class MainActivity extends ActionBarActivity {
     }
 
     public void onPickClick(View view) {
-        System.out.print(123);
         Intent intent = new Intent(this, ImagePickerPlusActivity.class);
         intent.putExtra(ImagePickerPlusActivity.EXTRA_PICK_PHOTO_COUNT, 10); //10张
         startActivityForResult(intent, 1);
