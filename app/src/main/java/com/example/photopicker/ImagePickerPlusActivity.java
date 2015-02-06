@@ -6,6 +6,8 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.BitmapFactory.Options;
 import android.graphics.Matrix;
+import android.media.MediaScannerConnection;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
@@ -31,6 +33,7 @@ import android.widget.Toast;
 
 import java.io.File;
 import java.lang.ref.WeakReference;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -627,27 +630,35 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
                         orientation = (String) imgView.getTag(R.string.view_tag_key2);
                     }
                     Bitmap b = null;
-                    if (b == null) {
+                    if (b == null) { //MINI
                         String thumbnailFilePath = thumbnailsMap.get(imgId);
                         if (!TextUtils.isEmpty(thumbnailFilePath)) {
-                            options.inSampleSize = 1;
-                            options.inJustDecodeBounds = true;
-                            BitmapFactory.decodeFile(thumbnailFilePath, options);
-                            if (options.outWidth > imgViewWidthAndHeight || options.outHeight > imgViewWidthAndHeight) {
-                                final float maxBitmapBorder = options.outWidth > options.outHeight ? options.outWidth : options.outHeight;
-                                options.inSampleSize = Math.round(maxBitmapBorder / ((float) imgViewWidthAndHeight));
+                            File miniFile = new File(thumbnailFilePath);
+                            if(miniFile.exists() && miniFile.length() > 0){
+                                options.inSampleSize = 1;
+                                options.inJustDecodeBounds = true;
+                                BitmapFactory.decodeFile(thumbnailFilePath, options);
+                                if (options.outWidth > imgViewWidthAndHeight || options.outHeight > imgViewWidthAndHeight) {
+                                    final float maxBitmapBorder = options.outWidth > options.outHeight ? options.outWidth : options.outHeight;
+                                    options.inSampleSize = Math.round(maxBitmapBorder / ((float) imgViewWidthAndHeight));
+                                }
+                                options.inJustDecodeBounds = false;
+                                b = BitmapUtil.getBitmap(thumbnailFilePath, options);
+                            }else{
+                                LogUtil.w(TAG, "1.mini file is not exists");
                             }
-                            options.inJustDecodeBounds = false;
-                            b = BitmapUtil.getBitmap(thumbnailFilePath, options);
                         } else {
-                            LogUtil.w(TAG, "thumbnail filePath is null");
+                            LogUtil.w(TAG, "1.mini filePath is null");
                         }
                     }
-                    if (b == null) {
+                    if (b == null) { //ORI
                         if (!TextUtils.isEmpty(tagFilePath)) {
                             b = getResizeBitmap(tagFilePath);
+                            if(b == null){
+                                LogUtil.w(TAG, "2.ori file maybe too big");
+                            }
                         } else {
-                            LogUtil.e(TAG, "ori filePath is null, 可能有逻辑错误");
+                            LogUtil.e(TAG, "2.ori filePath is null");
                         }
                     }
                     if (b == null) {
@@ -660,10 +671,22 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
                             options.inSampleSize = Math.round(maxBitmapBorder / ((float) imgViewWidthAndHeight));
                         }
                         options.inJustDecodeBounds = false;
-                        b = Thumbnails.getThumbnail(getContentResolver(), imgId,
-                                Thumbnails.MINI_KIND, options);
+                        b = Thumbnails.getThumbnail(getContentResolver(), imgId, Thumbnails.MINI_KIND, options);
+                        if(b != null && TextUtils.isEmpty(thumbnailsMap.get(imgId))){
+                            LogUtil.i(TAG, "3.gen mini and save path.");
+                            Cursor c = Thumbnails.queryMiniThumbnail(getContentResolver(), imgId, Thumbnails.MINI_KIND, new String[]{Thumbnails._ID, Thumbnails.DATA});
+                            if(null != c){
+                                if(c.moveToFirst()){
+                                    thumbnailsMap.put(imgId, c.getString(1));
+                                }else{
+                                    LogUtil.e(TAG, "3.query mini path fail !");
+                                }
+                                c.close();
+                            }else{
+                                LogUtil.e(TAG, "3.query mini cursor is null");
+                            }
+                        }
                     }
-
                     Bundle bundle = new Bundle();
                     bundle.putParcelable("bitmap", b);
                     bundle.putLong("imgId", imgId);
@@ -690,6 +713,9 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
             options.inJustDecodeBounds = true;
             options.inSampleSize = 1;
             BitmapFactory.decodeFile(filePath, options);
+            if(options.outWidth*options.outHeight > 1600 * 1200){
+                return null;
+            }
             if (options.outWidth > imgViewWidthAndHeight || options.outHeight > imgViewWidthAndHeight) {
                 float maxBitmapBorder = options.outWidth > options.outHeight ? options.outWidth : options.outHeight;
                 options.inSampleSize = Math.round(maxBitmapBorder / ((float) imgViewWidthAndHeight));
