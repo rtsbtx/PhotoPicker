@@ -5,9 +5,6 @@ import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.BitmapFactory.Options;
-import android.graphics.Matrix;
-import android.media.MediaScannerConnection;
-import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
@@ -32,15 +29,17 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.lang.ref.WeakReference;
-import java.net.URI;
 import java.util.ArrayList;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class ImagePickerPlusActivity extends ActionBarActivity {
 
-    public static final String EXTRA_PICK_PHOTO_COUNT = "pick_count";
+    public static final String EXTRA_PICK_PHOTO_COUNT = "extra_pick_photo_count";
+    public static final String EXTRA_DISK_CACHE_PATH = "extra_disk_cache_path";
 
     public static final String EXTRA_PICK_RETURN_DATA_PATHS = "photoPaths";
     public static final String EXTRA_PICK_RETURN_DATA_IDS = "photoIds";
@@ -110,6 +109,8 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
     private long clickAlbumId;
     private View clickItemView;
 
+    private String diskCachePath;
+
     @Override
     protected void onDestroy() {
         flag = false;
@@ -140,6 +141,7 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.image_picker_plus_layout);
 
+        diskCachePath = getIntent().getStringExtra(EXTRA_DISK_CACHE_PATH);
         CAN_CHECK_COUNT = getIntent().getIntExtra(EXTRA_PICK_PHOTO_COUNT, 0);
         if (CAN_CHECK_COUNT <= 0) {
             LogUtil.e(TAG, "pick_count from intent is 0");
@@ -630,7 +632,7 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
                         orientation = (String) imgView.getTag(R.string.view_tag_key2);
                     }
                     Bitmap b = null;
-                    if (b == null) { //MINI
+                    if (b == null) { //get mini from system diskcache
                         String thumbnailFilePath = thumbnailsMap.get(imgId);
                         if (!TextUtils.isEmpty(thumbnailFilePath)) {
                             File miniFile = new File(thumbnailFilePath);
@@ -651,16 +653,28 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
                             LogUtil.w(TAG, "1.mini filePath is null");
                         }
                     }
-                    if (b == null) { //ORI
+                    if(b == null){ //my mini from my diskcache
+                        if(!TextUtils.isEmpty(diskCachePath) && !TextUtils.isEmpty(tagFilePath)){
+                            b = BitmapUtil.getBitmap(new File(diskCachePath, new File(tagFilePath).getName()).getAbsolutePath());
+                            if(b == null){
+                                LogUtil.w(TAG, "2.get my mini from my diskcache fail.");
+                            }else{
+                                LogUtil.i(TAG, "2.get my mini from my diskcache succ.");
+                            }
+                        }
+                    }
+                    if (b == null) { //my mini from system ori and save to my diskcache
                         if (!TextUtils.isEmpty(tagFilePath)) {
                             b = getResizeBitmap(tagFilePath);
                             if(b == null){
-                                LogUtil.w(TAG, "2.ori file maybe too big");
+                                LogUtil.w(TAG, "3.ori file maybe too big");
                             }
                         } else {
-                            LogUtil.e(TAG, "2.ori filePath is null");
+                            LogUtil.e(TAG, "3.ori filePath is null");
                         }
                     }
+                    //gen system mini by system and save to system diskcache、db.
+                    //性能很差
                     if (b == null) {
                         options.inSampleSize = 1;
                         options.inJustDecodeBounds = true;
@@ -673,17 +687,17 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
                         options.inJustDecodeBounds = false;
                         b = Thumbnails.getThumbnail(getContentResolver(), imgId, Thumbnails.MINI_KIND, options);
                         if(b != null && TextUtils.isEmpty(thumbnailsMap.get(imgId))){
-                            LogUtil.i(TAG, "3.gen mini and save path.");
+                            LogUtil.i(TAG, "4.gen mini and save path.");
                             Cursor c = Thumbnails.queryMiniThumbnail(getContentResolver(), imgId, Thumbnails.MINI_KIND, new String[]{Thumbnails._ID, Thumbnails.DATA});
                             if(null != c){
                                 if(c.moveToFirst()){
                                     thumbnailsMap.put(imgId, c.getString(1));
                                 }else{
-                                    LogUtil.e(TAG, "3.query mini path fail !");
+                                    LogUtil.e(TAG, "4.query mini path fail !");
                                 }
                                 c.close();
                             }else{
-                                LogUtil.e(TAG, "3.query mini cursor is null");
+                                LogUtil.e(TAG, "4.query mini cursor is null");
                             }
                         }
                     }
@@ -713,15 +727,36 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
             options.inJustDecodeBounds = true;
             options.inSampleSize = 1;
             BitmapFactory.decodeFile(filePath, options);
-            if(options.outWidth*options.outHeight > 1600 * 1200){
-                return null;
+            if(options.outWidth*options.outHeight >= 1600 * 1200){
+                if(TextUtils.isEmpty(diskCachePath)){
+                    return null;
+                }
             }
             if (options.outWidth > imgViewWidthAndHeight || options.outHeight > imgViewWidthAndHeight) {
                 float maxBitmapBorder = options.outWidth > options.outHeight ? options.outWidth : options.outHeight;
                 options.inSampleSize = Math.round(maxBitmapBorder / ((float) imgViewWidthAndHeight));
             }
             options.inJustDecodeBounds = false;
-            return BitmapUtil.getBitmap(filePath, options);
+            Bitmap bm = BitmapUtil.getBitmap(filePath, options);
+            if(null != bm){
+                FileOutputStream fos = null;
+                try {
+                    LogUtil.i(TAG, "mini from ori saving to diskcache");
+                    fos = new FileOutputStream(new File(diskCachePath, new File(filePath).getName()));
+                    bm.compress(Bitmap.CompressFormat.JPEG, 100, fos);
+                } catch (FileNotFoundException e) {
+                    e.printStackTrace();
+                } finally {
+                    if(null != fos){
+                        try {
+                            fos.close();
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    }
+                }
+            }
+            return bm;
         }
 
     }

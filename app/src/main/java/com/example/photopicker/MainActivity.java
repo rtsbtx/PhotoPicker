@@ -1,6 +1,7 @@
 package com.example.photopicker;
 
 import android.content.Intent;
+import android.os.Environment;
 import android.support.v7.app.ActionBarActivity;
 import android.os.Bundle;
 import android.view.Menu;
@@ -21,6 +22,7 @@ public class MainActivity extends ActionBarActivity {
     public void onPickClick(View view) {
         Intent intent = new Intent(this, ImagePickerPlusActivity.class);
         intent.putExtra(ImagePickerPlusActivity.EXTRA_PICK_PHOTO_COUNT, 10); //10张
+        intent.putExtra(ImagePickerPlusActivity.EXTRA_DISK_CACHE_PATH, Environment.getExternalStorageDirectory().getAbsolutePath());
         startActivityForResult(intent, 1);
     }
 
