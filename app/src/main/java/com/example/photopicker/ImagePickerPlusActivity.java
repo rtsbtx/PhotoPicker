@@ -142,6 +142,9 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
         setContentView(R.layout.image_picker_plus_layout);
 
         diskCachePath = getIntent().getStringExtra(EXTRA_DISK_CACHE_PATH);
+        if(!TextUtils.isEmpty(diskCachePath)){
+            new File(diskCachePath).mkdirs();
+        }
         CAN_CHECK_COUNT = getIntent().getIntExtra(EXTRA_PICK_PHOTO_COUNT, 0);
         if (CAN_CHECK_COUNT <= 0) {
             LogUtil.e(TAG, "pick_count from intent is 0");
