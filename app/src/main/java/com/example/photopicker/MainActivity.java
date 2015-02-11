@@ -22,7 +22,7 @@ public class MainActivity extends ActionBarActivity {
     public void onPickClick(View view) {
         Intent intent = new Intent(this, ImagePickerPlusActivity.class);
         intent.putExtra(ImagePickerPlusActivity.EXTRA_PICK_PHOTO_COUNT, 10); //10张
-        intent.putExtra(ImagePickerPlusActivity.EXTRA_DISK_CACHE_PATH, Environment.getExternalStorageDirectory().getAbsolutePath());
+        intent.putExtra(ImagePickerPlusActivity.EXTRA_DISK_CACHE_PATH, Environment.getExternalStorageDirectory().getAbsolutePath() + "/diskcache");
         startActivityForResult(intent, 1);
     }
 
