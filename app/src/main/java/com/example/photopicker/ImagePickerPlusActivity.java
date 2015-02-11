@@ -575,23 +575,18 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
 
     class LoadPhonePhotoThread extends Thread {
 
-        private ConcurrentLinkedQueue<ImageView> imgViews = new ConcurrentLinkedQueue<ImageView>();
-        private LongSparseArray<WeakReference<Bitmap>> cache = new LongSparseArray<WeakReference<Bitmap>>();
+        private ConcurrentLinkedQueue<ImageView> imgViews = new ConcurrentLinkedQueue<>();
+        private LongSparseArray<String> thumbnailsMap = new LongSparseArray<>();
         private Options options = new Options();
         private android.graphics.Matrix matrix = new android.graphics.Matrix();
 
         public LoadPhonePhotoThread() {
             super();
             options.inPreferredConfig = Bitmap.Config.RGB_565;
-            options.inInputShareable = true;
-            options.inPurgeable = true;
         }
 
         public void clearTaskAndCache() {
             imgViews.clear();
-            synchronized (cache) {
-                cache.clear();
-            }
         }
 
         public void addTask(String filePath, ImageView imgView, Long imgId, String orientation) {
@@ -612,7 +607,6 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
 
         @Override
         public void run() {
-            LongSparseArray<String> thumbnailsMap = new LongSparseArray<String>();
             String[] projection = {Thumbnails._ID, Thumbnails.IMAGE_ID, Thumbnails.DATA};
             Cursor cursor = getContentResolver().query(Thumbnails.EXTERNAL_CONTENT_URI, projection,
                     Thumbnails.KIND + "=?", new String[]{String.valueOf(Thumbnails.MINI_KIND)}, null);
@@ -636,73 +630,19 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
                     }
                     Bitmap b = null;
                     if (b == null) { //get mini from system diskcache
-                        String thumbnailFilePath = thumbnailsMap.get(imgId);
-                        if (!TextUtils.isEmpty(thumbnailFilePath)) {
-                            File miniFile = new File(thumbnailFilePath);
-                            if(miniFile.exists() && miniFile.length() > 0){
-                                options.inSampleSize = 1;
-                                options.inJustDecodeBounds = true;
-                                BitmapFactory.decodeFile(thumbnailFilePath, options);
-                                if (options.outWidth > imgViewWidthAndHeight || options.outHeight > imgViewWidthAndHeight) {
-                                    final float maxBitmapBorder = options.outWidth > options.outHeight ? options.outWidth : options.outHeight;
-                                    options.inSampleSize = Math.round(maxBitmapBorder / ((float) imgViewWidthAndHeight));
-                                }
-                                options.inJustDecodeBounds = false;
-                                b = BitmapUtil.getBitmap(thumbnailFilePath, options);
-                            }else{
-                                LogUtil.w(TAG, "1.mini file is not exists");
-                            }
-                        } else {
-                            LogUtil.w(TAG, "1.mini filePath is null");
-                        }
+                        b = getSystemMiniFromSystemDiskCache(imgId);
                     }
                     if(b == null){ //my mini from my diskcache
-                        if(!TextUtils.isEmpty(diskCachePath) && !TextUtils.isEmpty(tagFilePath)){
-                            b = BitmapUtil.getBitmap(new File(diskCachePath, new File(tagFilePath).getName()).getAbsolutePath());
-                            if(b == null){
-                                LogUtil.w(TAG, "2.get my mini from my diskcache fail.");
-                            }else{
-                                LogUtil.i(TAG, "2.get my mini from my diskcache succ.");
-                            }
-                        }
+                        b = getMyMiniFromMyDiskCache(tagFilePath);
                     }
-                    if (b == null) { //my mini from system ori and save to my diskcache
-                        if (!TextUtils.isEmpty(tagFilePath)) {
-                            b = getResizeBitmap(tagFilePath);
-                            if(b == null){
-                                LogUtil.w(TAG, "3.ori file maybe too big");
-                            }
-                        } else {
-                            LogUtil.e(TAG, "3.ori filePath is null");
-                        }
+                    //my mini from system ori and save to my diskcache
+                    if (b == null) {
+                        b = getMyMiniFromSystemOri(tagFilePath);
                     }
                     //gen system mini by system and save to system diskcache、db.
-                    //性能很差
                     if (b == null) {
-                        options.inSampleSize = 1;
-                        options.inJustDecodeBounds = true;
-                        Thumbnails.getThumbnail(getContentResolver(), imgId,
-                                Thumbnails.MINI_KIND, options);
-                        if (options.outWidth > imgViewWidthAndHeight || options.outHeight > imgViewWidthAndHeight) {
-                            final float maxBitmapBorder = options.outWidth > options.outHeight ? options.outWidth : options.outHeight;
-                            options.inSampleSize = Math.round(maxBitmapBorder / ((float) imgViewWidthAndHeight));
-                        }
-                        options.inJustDecodeBounds = false;
-                        b = Thumbnails.getThumbnail(getContentResolver(), imgId, Thumbnails.MINI_KIND, options);
-                        if(b != null && TextUtils.isEmpty(thumbnailsMap.get(imgId))){
-                            LogUtil.i(TAG, "4.gen mini and save path.");
-                            Cursor c = Thumbnails.queryMiniThumbnail(getContentResolver(), imgId, Thumbnails.MINI_KIND, new String[]{Thumbnails._ID, Thumbnails.DATA});
-                            if(null != c){
-                                if(c.moveToFirst()){
-                                    thumbnailsMap.put(imgId, c.getString(1));
-                                }else{
-                                    LogUtil.e(TAG, "4.query mini path fail !");
-                                }
-                                c.close();
-                            }else{
-                                LogUtil.e(TAG, "4.query mini cursor is null");
-                            }
-                        }
+                        //性能很差
+                        b = getSystemMiniFromSystem(imgId);
                     }
                     Bundle bundle = new Bundle();
                     bundle.putParcelable("bitmap", b);
@@ -726,40 +666,112 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
             clearTaskAndCache();
         }
 
-        private Bitmap getResizeBitmap(String filePath) {
-            options.inJustDecodeBounds = true;
-            options.inSampleSize = 1;
-            BitmapFactory.decodeFile(filePath, options);
-            if(options.outWidth*options.outHeight >= 1600 * 1200){
-                if(TextUtils.isEmpty(diskCachePath)){
-                    return null;
+        private Bitmap getSystemMiniFromSystemDiskCache(long imgId){
+            String thumbnailFilePath = thumbnailsMap.get(imgId);
+            if (!TextUtils.isEmpty(thumbnailFilePath)) {
+                File miniFile = new File(thumbnailFilePath);
+                if(miniFile.exists() && miniFile.length() > 0){
+                    options.inSampleSize = 1;
+                    options.inJustDecodeBounds = true;
+                    BitmapFactory.decodeFile(thumbnailFilePath, options);
+                    if (options.outWidth > imgViewWidthAndHeight || options.outHeight > imgViewWidthAndHeight) {
+                        final float maxBitmapBorder = options.outWidth > options.outHeight ? options.outWidth : options.outHeight;
+                        options.inSampleSize = Math.round(maxBitmapBorder / ((float) imgViewWidthAndHeight));
+                    }
+                    options.inJustDecodeBounds = false;
+                    return BitmapUtil.getBitmap(thumbnailFilePath, options);
+                }else{
+                    LogUtil.w(TAG, "1.mini file is not exists");
                 }
+            } else {
+                LogUtil.w(TAG, "1.mini filePath is null");
             }
+            return null;
+        }
+
+        private Bitmap getMyMiniFromMyDiskCache(String oriFilePath){
+            if(!TextUtils.isEmpty(diskCachePath) && !TextUtils.isEmpty(oriFilePath)){
+                Bitmap b = BitmapUtil.getBitmap(new File(diskCachePath, new File(oriFilePath).getName()).getAbsolutePath());
+                if(b == null){
+                    LogUtil.w(TAG, "2.get my mini from my diskcache fail.");
+                }else{
+                    LogUtil.i(TAG, "2.get my mini from my diskcache succ.");
+                }
+                return b;
+            }
+            return null;
+        }
+
+        private Bitmap getSystemMiniFromSystem(long imgId){
+            options.inSampleSize = 1;
+            options.inJustDecodeBounds = true;
+            Thumbnails.getThumbnail(getContentResolver(), imgId,
+                    Thumbnails.MINI_KIND, options);
             if (options.outWidth > imgViewWidthAndHeight || options.outHeight > imgViewWidthAndHeight) {
-                float maxBitmapBorder = options.outWidth > options.outHeight ? options.outWidth : options.outHeight;
+                final float maxBitmapBorder = options.outWidth > options.outHeight ? options.outWidth : options.outHeight;
                 options.inSampleSize = Math.round(maxBitmapBorder / ((float) imgViewWidthAndHeight));
             }
             options.inJustDecodeBounds = false;
-            Bitmap bm = BitmapUtil.getBitmap(filePath, options);
-            if(null != bm){
-                FileOutputStream fos = null;
-                try {
-                    LogUtil.i(TAG, "mini from ori saving to diskcache");
-                    fos = new FileOutputStream(new File(diskCachePath, new File(filePath).getName()));
-                    bm.compress(Bitmap.CompressFormat.JPEG, 100, fos);
-                } catch (FileNotFoundException e) {
-                    e.printStackTrace();
-                } finally {
-                    if(null != fos){
-                        try {
-                            fos.close();
-                        } catch (IOException e) {
-                            e.printStackTrace();
-                        }
+            Bitmap bm = Thumbnails.getThumbnail(getContentResolver(), imgId, Thumbnails.MINI_KIND, options);
+            if(bm != null && TextUtils.isEmpty(thumbnailsMap.get(imgId))){
+                LogUtil.i(TAG, "4.gen mini and save path.");
+                Cursor c = Thumbnails.queryMiniThumbnail(getContentResolver(), imgId, Thumbnails.MINI_KIND, new String[]{Thumbnails._ID, Thumbnails.DATA});
+                if(null != c){
+                    if(c.moveToFirst()){
+                        thumbnailsMap.put(imgId, c.getString(1));
+                    }else{
+                        LogUtil.e(TAG, "4.query mini path fail !");
                     }
+                    c.close();
+                }else{
+                    LogUtil.e(TAG, "4.query mini cursor is null");
                 }
             }
             return bm;
+        }
+
+        private Bitmap getMyMiniFromSystemOri(String filePath) {
+            if (!TextUtils.isEmpty(filePath)) {
+                options.inJustDecodeBounds = true;
+                options.inSampleSize = 1;
+                BitmapFactory.decodeFile(filePath, options);
+                if(options.outWidth*options.outHeight >= 1600 * 1200){
+                    if(TextUtils.isEmpty(diskCachePath)){
+                        return null;
+                    }
+                }
+                if (options.outWidth > imgViewWidthAndHeight || options.outHeight > imgViewWidthAndHeight) {
+                    float maxBitmapBorder = options.outWidth > options.outHeight ? options.outWidth : options.outHeight;
+                    options.inSampleSize = Math.round(maxBitmapBorder / ((float) imgViewWidthAndHeight));
+                }
+                options.inJustDecodeBounds = false;
+                Bitmap bm = BitmapUtil.getBitmap(filePath, options);
+                if(null != bm){
+                    FileOutputStream fos = null;
+                    try {
+                        LogUtil.i(TAG, "mini from ori saving to diskcache");
+                        fos = new FileOutputStream(new File(diskCachePath, new File(filePath).getName()));
+                        bm.compress(Bitmap.CompressFormat.JPEG, 100, fos);
+                    } catch (FileNotFoundException e) {
+                        e.printStackTrace();
+                    } finally {
+                        if(null != fos){
+                            try {
+                                fos.close();
+                            } catch (IOException e) {
+                                e.printStackTrace();
+                            }
+                        }
+                    }
+                }
+                if(bm == null){
+                    LogUtil.w(TAG, "3.ori file maybe too big");
+                }
+                return bm;
+            } else {
+                LogUtil.e(TAG, "3.ori filePath is null");
+                return null;
+            }
         }
 
     }
