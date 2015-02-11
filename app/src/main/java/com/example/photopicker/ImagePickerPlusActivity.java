@@ -644,7 +644,6 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
                         b = getSystemMiniFromSystem(imgId);
                     }
                     Bundle bundle = new Bundle();
-                    bundle.putParcelable("bitmap", b);
                     bundle.putLong("imgId", imgId);
                     if (b != null) {
                         try {
