@@ -32,7 +32,6 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
@@ -691,7 +690,7 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
 
         private Bitmap getMyMiniFromMyDiskCache(String oriFilePath){
             if(!TextUtils.isEmpty(diskCachePath) && !TextUtils.isEmpty(oriFilePath)){
-                Bitmap b = BitmapUtil.getBitmap(new File(diskCachePath, new File(oriFilePath).getName()).getAbsolutePath());
+                Bitmap b = BitmapUtil.getBitmap(new File(diskCachePath, new File(oriFilePath).getName().split("\\.")[0]).getAbsolutePath());
                 if(b == null){
                     LogUtil.w(TAG, "2.get my mini from my diskcache fail.");
                 }else{
@@ -750,7 +749,7 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
                     FileOutputStream fos = null;
                     try {
                         LogUtil.i(TAG, "mini from ori saving to diskcache");
-                        fos = new FileOutputStream(new File(diskCachePath, new File(filePath).getName()));
+                        fos = new FileOutputStream(new File(diskCachePath, new File(filePath).getName().split("\\.")[0]));
                         bm.compress(Bitmap.CompressFormat.JPEG, 100, fos);
                     } catch (FileNotFoundException e) {
                         e.printStackTrace();
