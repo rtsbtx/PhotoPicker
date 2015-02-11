@@ -647,13 +647,17 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
                     bundle.putParcelable("bitmap", b);
                     bundle.putLong("imgId", imgId);
                     if (b != null) {
-                        int o = Integer.parseInt(orientation);
-                        if (o > 0 && o < 360) {
-                            matrix.reset();
-                            matrix.setRotate(o);
-                            b = Bitmap.createBitmap(b, 0, 0, b.getWidth(), b.getHeight(), matrix, false);
+                        try {
+                            int o = Integer.parseInt(orientation);
+                            if (o > 0 && o < 360) {
+                                matrix.reset();
+                                matrix.setRotate(o);
+                                b = Bitmap.createBitmap(b, 0, 0, b.getWidth(), b.getHeight(), matrix, false);
+                            }
+                            bundle.putParcelable("bitmap", b);
+                        } catch (NumberFormatException e) {
+                            e.printStackTrace();
                         }
-                        bundle.putParcelable("bitmap", b);
                     } else {
                         LogUtil.e(TAG, "get small bitmap fail ! " + b);
                     }
@@ -794,7 +798,7 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
             imageInfo.imageId = cursor2.getLong(0);
             imageInfo.size = cursor2.getLong(1);
             imageInfo.filePath = cursor2.getString(2);
-            imageInfo.orientation = String.valueOf(cursor2.getInt(6));
+            imageInfo.orientation = new String(String.valueOf(cursor2.getInt(6)));
 
             albumInfo.photoCount++;
             albumInfo.imageInfos.add(imageInfo);
