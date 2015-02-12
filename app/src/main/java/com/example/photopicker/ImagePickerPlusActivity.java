@@ -784,7 +784,12 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
                 Media.DISPLAY_NAME, Media.ORIENTATION};
         Cursor cursor2 = getContentResolver().query(Media.EXTERNAL_CONTENT_URI, projection2, null,
                 null, Media.DATE_TAKEN + " DESC, " + Media._ID + " DESC");
+        String filePath;
         while (cursor2.moveToNext()) {
+            filePath = cursor2.getString(2);
+            if(!new File(filePath).exists()){
+                continue;
+            }
             long Media_BUCKET_ID = cursor2.getLong(3);
             AlbumInfo albumInfo = itemAlbumDatas.get(Media_BUCKET_ID);
             if (albumInfo == null) {
@@ -796,7 +801,7 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
             ItemImageInfo imageInfo = new ItemImageInfo();
             imageInfo.imageId = cursor2.getLong(0);
             imageInfo.size = cursor2.getLong(1);
-            imageInfo.filePath = cursor2.getString(2);
+            imageInfo.filePath = filePath;
             imageInfo.orientation = new String(String.valueOf(cursor2.getInt(6)));
 
             albumInfo.photoCount++;

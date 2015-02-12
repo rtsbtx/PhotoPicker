@@ -17,8 +17,6 @@ public class BitmapUtil {
         }
 
         Options options = new Options();
-        options.inInputShareable = true;
-        options.inPurgeable = true;
         options.inPreferredConfig = Bitmap.Config.RGB_565;
 
         //<<====================
@@ -80,8 +78,6 @@ public class BitmapUtil {
 
 		Options options = new Options();
 		options.inSampleSize = 1;
-		options.inInputShareable = true;
-		options.inPurgeable = true;
 		options.inPreferredConfig = Bitmap.Config.RGB_565;
 
 		while (true) {
@@ -154,8 +150,6 @@ public class BitmapUtil {
 
 		Options options = new Options();
 		options.inSampleSize = 1;
-		options.inInputShareable = true;
-		options.inPurgeable = true;
 		options.inPreferredConfig = Bitmap.Config.RGB_565;
 
 		while (true) {

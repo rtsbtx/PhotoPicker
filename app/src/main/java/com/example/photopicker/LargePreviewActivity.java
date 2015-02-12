@@ -4,14 +4,17 @@ import java.io.File;
 
 import android.content.Intent;
 import android.graphics.Bitmap;
+import android.graphics.RectF;
 import android.os.Bundle;
 import android.support.v7.app.ActionBarActivity;
 import android.text.TextUtils;
+import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.View.OnClickListener;
+import android.view.ViewTreeObserver;
 import android.widget.ImageView;
 import android.widget.ImageView.ScaleType;
 
@@ -44,7 +47,7 @@ public class LargePreviewActivity extends ActionBarActivity {
 		setContentView(R.layout.large_preview_layout);
 		
 		filePath = getIntent().getStringExtra("filePath");
-        String orientation = getIntent().getStringExtra("orientation");
+        final String orientation = getIntent().getStringExtra("orientation");
         isJustPreview = getIntent().getBooleanExtra("isJustPreview", true);
 
 		if(TextUtils.isEmpty(filePath) || TextUtils.isEmpty(orientation)){
@@ -53,10 +56,6 @@ public class LargePreviewActivity extends ActionBarActivity {
 			return;
 		}
 		
-//		final View viewTitleBar = findViewById(R.id.title_bar);
-		
-//		setTitle(ImagePickerPlusActivity.getSizeStr(new File(filePath).length()));
-		
 		getSupportActionBar().setTitle(ImagePickerPlusActivity.getSizeStr(new File(filePath).length()));
 		getSupportActionBar().setDefaultDisplayHomeAsUpEnabled(true);
 		getSupportActionBar().setDisplayShowTitleEnabled(true);
@@ -64,55 +63,55 @@ public class LargePreviewActivity extends ActionBarActivity {
 		getSupportActionBar().setDisplayShowHomeEnabled(true);
 		getSupportActionBar().setHomeButtonEnabled(true);
 		getSupportActionBar().setShowHideAnimationEnabled(false);
-		
-//		setTopLeftImageButtonBackAction(new OnClickListener() {
-//			@Override
-//			public void onClick(View v) {
-//				setResult(RESULT_CANCELED);
-//				finish();
-//			}
-//		});
-		
-//		final Button btTopRight = (Button)findViewById(R.id.bt_top_right);
-//		btTopRight.setVisibility(View.VISIBLE);
-//		btTopRight.setText("选择");
-//		btTopRight.setOnClickListener(new OnClickListener() {
-//			@Override
-//			public void onClick(View v) {
-//				setResult(RESULT_OK, new Intent().putExtra("filePath", filePath));
-//				finish();
-//			}
-//		});
-		
-		Bitmap bp = BitmapUtil.getBitmap(filePath);
-        int orientationInt = Integer.parseInt(orientation);
-		if(bp != null){
-            if(orientationInt > 0 && orientationInt < 360){
-                android.graphics.Matrix matrix = new android.graphics.Matrix();
-                matrix.reset();
-                matrix.setRotate(orientationInt);
-                bp = Bitmap.createBitmap(bp,0,0,bp.getWidth(),bp.getHeight(),matrix,false);
+
+        final ImageView ivt = (ImageView)findViewById(R.id.zivp);
+        ivt.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
+            @Override
+            public void onGlobalLayout() {
+                ivt.getViewTreeObserver().removeGlobalOnLayoutListener(this);
+                Bitmap bp = BitmapUtil.getBitmap(filePath);
+                if (bp != null) {
+                    try {
+                        int orientationInt = Integer.parseInt(orientation);
+                        ivt.setImageBitmap(bp);
+                        android.graphics.Matrix matrix = new android.graphics.Matrix();
+                        matrix.postTranslate(ivt.getWidth()/2 - bp.getWidth()/2, ivt.getHeight()/2 - bp.getHeight()/2);
+                        rotate(orientationInt, matrix, ivt);
+                        if (orientationInt == 90 || orientationInt == 270) {
+                            minZoom(bp.getHeight(), bp.getWidth(), matrix, ivt);
+                        } else {
+                            minZoom(bp.getWidth(), bp.getHeight(), matrix, ivt);
+                        }
+                        ivt.setImageMatrix(matrix);
+                    } catch (NumberFormatException e) {
+                        e.printStackTrace();
+                    }
+                } else {
+                    LogUtil.e("LargePreviewActivity", "bitmap is null");
+                }
             }
-			ImageView ivt = (ImageView)findViewById(R.id.zivp);
-			ivt.setScaleType(ScaleType.FIT_CENTER);
-			ivt.setImageBitmap(bp);
-			ivt.setOnClickListener(new OnClickListener() {
-				@Override
-				public void onClick(View v) {
-					if(getSupportActionBar().isShowing()){
-						getSupportActionBar().hide();
-					}else{
-						getSupportActionBar().show();
-					}
-				}
-			});
-		}else{
-			LogUtil.e("LargePreviewActivity", "bitmap is null");
-		}
-				
+        });
+
 	}
-	
-	@Override
+
+    private boolean rotate(int orientationInt, android.graphics.Matrix matrix, ImageView iv){
+        if(orientationInt > 0 && orientationInt < 360){
+            matrix.postRotate(orientationInt, iv.getWidth()/2, iv.getHeight()/2);
+            return true;
+        }
+        return false;
+    }
+
+    private void minZoom(int w, int h, android.graphics.Matrix matrix, ImageView iv) {
+        float minScaleR = Math.min(
+                ((float) iv.getWidth()) / ((float) w),
+                ((float) iv.getHeight()) / ((float) h));
+        if (minScaleR < 1.0) {
+            matrix.postScale(minScaleR, minScaleR, iv.getWidth()/2, iv.getHeight()/2);
+        }
+    }
+
+    @Override
 	public boolean onCreateOptionsMenu(Menu menu) {
 		// Inflate the menu; this adds items to the action bar if it is present.
         if(isJustPreview){
