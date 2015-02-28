@@ -1,5 +1,6 @@
 package com.example.photopicker;
 
+import android.content.Context;
 import android.content.Intent;
 import android.database.Cursor;
 import android.graphics.Bitmap;
@@ -11,6 +12,7 @@ import android.os.Message;
 import android.provider.MediaStore.Images.Media;
 import android.provider.MediaStore.Images.Thumbnails;
 import android.support.v4.util.LongSparseArray;
+import android.support.v4.widget.CursorAdapter;
 import android.support.v7.app.ActionBarActivity;
 import android.text.TextUtils;
 import android.util.DisplayMetrics;
@@ -29,9 +31,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
@@ -64,7 +64,16 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
                 return true;
             }
             isAlbumMode = !isAlbumMode;
-            adapter.notifyDataSetChanged();
+//            adapter.notifyDataSetChanged();
+            if(adapter instanceof  MyCursorAdapter){
+                try {
+                    ((MyCursorAdapter)adapter).changeCursor(getAdapterDatas());
+                } catch (Exception e) {
+                    LogUtil.e(TAG, "unknow.", e);
+                }
+            }else{
+                adapter.notifyDataSetChanged();
+            }
             if (!isAlbumMode) {
                 lv.setSelection(0);
             }
@@ -113,6 +122,7 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
     @Override
     protected void onDestroy() {
         flag = false;
+//        getSupportLoaderManager().destroyLoader(0);
         System.gc();
         super.onDestroy();
     }
@@ -126,7 +136,16 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
                 return true;
             }
             isAlbumMode = !isAlbumMode;
-            adapter.notifyDataSetChanged();
+//            adapter.notifyDataSetChanged();
+            if(adapter instanceof  MyCursorAdapter){
+                try {
+                    ((MyCursorAdapter)adapter).changeCursor(getAdapterDatas());
+                } catch (Exception e) {
+                    LogUtil.e(TAG, "unknow.", e);
+                }
+            }else{
+                adapter.notifyDataSetChanged();
+            }
             if (!isAlbumMode) {
                 lv.setSelection(0);
             }
@@ -135,13 +154,26 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
         return super.onKeyDown(keyCode, event);
     }
 
+    private void setLayoutHeight(ImageView imageView) {
+        ViewGroup.LayoutParams vl = imageView.getLayoutParams();
+        if (vl == null) {
+            vl = new ViewGroup.LayoutParams(imgViewWidthAndHeight, imgViewWidthAndHeight);
+        }
+        vl.width = imgViewWidthAndHeight;
+        vl.height = imgViewWidthAndHeight;
+        imageView.setLayoutParams(vl);
+        imageView.setImageBitmap(null);
+    }
+
+    LoadPhonePhotoThread t;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.image_picker_plus_layout);
 
         diskCachePath = getIntent().getStringExtra(EXTRA_DISK_CACHE_PATH);
-        if(!TextUtils.isEmpty(diskCachePath)){
+        if (!TextUtils.isEmpty(diskCachePath)) {
             new File(diskCachePath).mkdirs();
         }
         CAN_CHECK_COUNT = getIntent().getIntExtra(EXTRA_PICK_PHOTO_COUNT, 0);
@@ -162,13 +194,20 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
         DisplayMetrics outMetrics = new DisplayMetrics();
         getWindowManager().getDefaultDisplay().getMetrics(outMetrics);
 
-        imgViewWidthAndHeight = outMetrics.widthPixels / 3 - 4;
+        imgViewWidthAndHeight = outMetrics.widthPixels / 3;
 
-        itemAlbumDatas = getAdapterDatas();
+        Cursor albumCursor = null;
+        try {
+            albumCursor = getAdapterDatas();
+            itemAlbumDatas = new LongSparseArray<>();
+        } catch (Exception e) {
+            LogUtil.w(TAG, "getAdapterDatas() SQL inject maybe fail ! getDataFrom getAdapterDatas2()", e);
+            itemAlbumDatas = getAdapterDatas2();
+        }
 
         lv = (ListView) findViewById(R.id.list_view);
 
-        final LoadPhonePhotoThread t = new LoadPhonePhotoThread();
+        t = new LoadPhonePhotoThread();
         t.setPriority(Thread.MIN_PRIORITY);
         t.start();
 
@@ -180,294 +219,617 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
                 Long msgId = msg.getData().getLong("imgId");
                 Long nowMsgId = (Long) imgView.getTag();
                 if (msgId.longValue() == nowMsgId.longValue()) {
-                    if(null != b){
+                    if (null != b) {
                         imgView.setImageBitmap(b);
-                    }else{
+                    } else {
                         imgView.setImageDrawable(null);
                     }
                 } else {
                     LogUtil.w(TAG, "last tag imgId != now tag imgId, 重新排序");
                     imgView.setImageDrawable(null);
-                    t.addTask(null, imgView, null, null);
+//                    t.addTask(null, imgView, null, null);
                 }
             }
         };
 
-        adapter = new BaseAdapter() {
-
-            private int size = itemAlbumDatas.size();
-            private LayoutInflater layoutInfalter = getLayoutInflater();
-
-            private void setLayoutHeight(ImageView imageView) {
-                ViewGroup.LayoutParams vl = imageView.getLayoutParams();
-                if (vl == null) {
-                    vl = new ViewGroup.LayoutParams(imgViewWidthAndHeight, imgViewWidthAndHeight);
-                }
-                vl.width = imgViewWidthAndHeight;
-                vl.height = imgViewWidthAndHeight;
-                imageView.setLayoutParams(vl);
-                imageView.setImageBitmap(null);
-            }
-
-            @Override
-            public View getView(int position, View convertView, ViewGroup parent) {
-                View view = convertView;
-                if (view == null) {
-                    view = layoutInfalter.inflate(R.layout.list_grid_item, parent, false);
-                }
-
-                ImageView imageView = (ImageView) view.findViewById(R.id.image_item);
-                ImageView imageView2 = (ImageView) view.findViewById(R.id.image_item_2);
-                ImageView imageView3 = (ImageView) view.findViewById(R.id.image_item_3);
-
-                setLayoutHeight(imageView);
-                setLayoutHeight(imageView2);
-                setLayoutHeight(imageView3);
-
-                TextView tv = (TextView) view.findViewById(R.id.tv_info);
-                TextView tv2 = (TextView) view.findViewById(R.id.tv_info2);
-                TextView tv_2 = (TextView) view.findViewById(R.id.tv_info_2);
-                TextView tv2_2 = (TextView) view.findViewById(R.id.tv_info2_2);
-                TextView tv_3 = (TextView) view.findViewById(R.id.tv_info_3);
-                TextView tv2_3 = (TextView) view.findViewById(R.id.tv_info2_3);
-
-                View bottomCt = view.findViewById(R.id.bottom_ct);
-                View bottomCt2 = view.findViewById(R.id.bottom_ct_2);
-                View bottomCt3 = view.findViewById(R.id.bottom_ct_3);
-
-                View allCt = view.findViewById(R.id.all_ct);
-                View allCt2 = view.findViewById(R.id.all_ct2);
-                View allCt3 = view.findViewById(R.id.all_ct3);
-
-                allCt.setOnClickListener(onItemClick);
-                allCt2.setOnClickListener(onItemClick);
-                allCt3.setOnClickListener(onItemClick);
-
-                CheckBox cb = (CheckBox) view.findViewById(R.id.checkbox);
-                CheckBox cb2 = (CheckBox) view.findViewById(R.id.checkbox_2);
-                CheckBox cb3 = (CheckBox) view.findViewById(R.id.checkbox_3);
-
-                TextView blackBg = (TextView) view.findViewById(R.id.tv_checked_bg);
-                TextView blackBg2 = (TextView) view.findViewById(R.id.tv_checked_bg2);
-                TextView blackBg3 = (TextView) view.findViewById(R.id.tv_checked_bg3);
-
-                cb.setTag(R.string.view_tag_key, blackBg);
-                cb2.setTag(R.string.view_tag_key, blackBg2);
-                cb3.setTag(R.string.view_tag_key, blackBg3);
-
-                allCt.setTag(R.string.view_tag_key, R.id.checkbox);
-                allCt2.setTag(R.string.view_tag_key, R.id.checkbox_2);
-                allCt3.setTag(R.string.view_tag_key, R.id.checkbox_3);
-
-                if (isAlbumMode) {
-
-                    cb.setVisibility(View.GONE);
-                    cb2.setVisibility(View.GONE);
-                    cb3.setVisibility(View.GONE);
-
-                    blackBg.setVisibility(View.GONE);
-                    blackBg2.setVisibility(View.GONE);
-                    blackBg3.setVisibility(View.GONE);
-
-                    bottomCt.setVisibility(View.VISIBLE);
-                    bottomCt2.setVisibility(View.VISIBLE);
-                    bottomCt3.setVisibility(View.VISIBLE);
-
-                    AlbumInfo albumInfo;
-                    ItemImageInfo imgInfo;
-                    int dataSize = itemAlbumDatas.size();
-
-                    if (position * 3 < dataSize) {
-                        albumInfo = itemAlbumDatas.valueAt(position * 3);
-                        imgInfo = albumInfo.imageInfos.get(0);
-                        t.addTask(imgInfo.filePath, imageView, imgInfo.imageId, imgInfo.orientation);
-                        bottomCt.setVisibility(View.VISIBLE);
-                        tv.setText(albumInfo.albumName);
-                        tv2.setText("(" + albumInfo.photoCount + ")");
-                        if (albumInfo.choiceCount > 0) {
-                            blackBg.setText("已选" + albumInfo.choiceCount + "张");
-                            blackBg.setVisibility(View.VISIBLE);
-                        }
-                        allCt.setTag(albumInfo.albumId);
-                        allCt.setVisibility(View.VISIBLE);
-                    } else {
-                        allCt.setVisibility(View.INVISIBLE);
-                    }
-
-                    if (position * 3 + 1 < dataSize) {
-                        albumInfo = itemAlbumDatas.valueAt(position * 3 + 1);
-                        imgInfo = albumInfo.imageInfos.get(0);
-                        t.addTask(imgInfo.filePath, imageView2, imgInfo.imageId, imgInfo.orientation);
-                        bottomCt2.setVisibility(View.VISIBLE);
-                        tv_2.setText(albumInfo.albumName);
-                        tv2_2.setText("(" + albumInfo.photoCount + ")");
-                        if (albumInfo.choiceCount > 0) {
-                            blackBg2.setText("已选" + albumInfo.choiceCount + "张");
-                            blackBg2.setVisibility(View.VISIBLE);
-                        }
-                        allCt2.setTag(albumInfo.albumId);
-                        allCt2.setVisibility(View.VISIBLE);
-                    } else {
-                        allCt2.setVisibility(View.INVISIBLE);
-                    }
-
-                    if (position * 3 + 2 < dataSize) {
-                        albumInfo = itemAlbumDatas.valueAt(position * 3 + 2);
-                        imgInfo = albumInfo.imageInfos.get(0);
-                        t.addTask(imgInfo.filePath, imageView3, imgInfo.imageId, imgInfo.orientation);
-                        bottomCt3.setVisibility(View.VISIBLE);
-                        tv_3.setText(albumInfo.albumName);
-                        tv2_3.setText("(" + albumInfo.photoCount + ")");
-                        if (albumInfo.choiceCount > 0) {
-                            blackBg3.setText("已选" + albumInfo.choiceCount + "张");
-                            blackBg3.setVisibility(View.VISIBLE);
-                        }
-                        allCt3.setTag(albumInfo.albumId);
-                        allCt3.setVisibility(View.VISIBLE);
-                    } else {
-                        allCt3.setVisibility(View.INVISIBLE);
-                    }
-
-                } else {
-
-                    cb.setVisibility(View.VISIBLE);
-                    cb2.setVisibility(View.VISIBLE);
-                    cb3.setVisibility(View.VISIBLE);
-
-                    cb.setOnCheckedChangeListener(null);
-                    cb2.setOnCheckedChangeListener(null);
-                    cb3.setOnCheckedChangeListener(null);
-
-                    bottomCt.setVisibility(View.GONE);
-                    bottomCt2.setVisibility(View.GONE);
-                    bottomCt3.setVisibility(View.GONE);
-
-                    AlbumInfo albumInfo = itemAlbumDatas.get(clickAlbumId);
-                    ItemImageInfo imgInfo;
-                    int dataSize = albumInfo.imageInfos.size();
-
-                    if (position * 3 < dataSize) {
-                        imgInfo = albumInfo.imageInfos.get(position * 3);
-                        t.addTask(imgInfo.filePath, imageView, imgInfo.imageId, imgInfo.orientation);
-                        allCt.setVisibility(View.VISIBLE);
-                        allCt.setTag(imgInfo.filePath);
-                        allCt.setTag(R.string.view_tag_key2, imgInfo.orientation);
-                        cb.setTag(position * 3);
-                        if (imgInfo.isChecked) {
-                            cb.setChecked(true);
-                            blackBg.setVisibility(View.VISIBLE);
-                            blackBg.setText(getSizeStr(imgInfo.size, imgInfo.filePath));
-                        } else {
-                            cb.setChecked(false);
-                            blackBg.setVisibility(View.GONE);
-                        }
-                    } else {
-                        allCt.setVisibility(View.INVISIBLE);
-                    }
-
-                    if (position * 3 + 1 < dataSize) {
-                        imgInfo = albumInfo.imageInfos.get(position * 3 + 1);
-                        t.addTask(imgInfo.filePath, imageView2, imgInfo.imageId, imgInfo.orientation);
-                        allCt2.setVisibility(View.VISIBLE);
-                        allCt2.setTag(imgInfo.filePath);
-                        allCt2.setTag(R.string.view_tag_key2, imgInfo.orientation);
-                        cb2.setTag(position * 3 + 1);
-                        if (imgInfo.isChecked) {
-                            cb2.setChecked(true);
-                            blackBg2.setVisibility(View.VISIBLE);
-                            blackBg2.setText(getSizeStr(imgInfo.size, imgInfo.filePath));
-                        } else {
-                            cb2.setChecked(false);
-                            blackBg2.setVisibility(View.GONE);
-                        }
-                    } else {
-                        allCt2.setVisibility(View.INVISIBLE);
-                    }
-
-                    if (position * 3 + 2 < dataSize) {
-                        imgInfo = albumInfo.imageInfos.get(position * 3 + 2);
-                        t.addTask(imgInfo.filePath, imageView3, imgInfo.imageId, imgInfo.orientation);
-                        allCt3.setVisibility(View.VISIBLE);
-                        allCt3.setTag(imgInfo.filePath);
-                        allCt3.setTag(R.string.view_tag_key2, imgInfo.orientation);
-                        cb3.setTag(position * 3 + 2);
-                        if (imgInfo.isChecked) {
-                            cb3.setChecked(true);
-                            blackBg3.setVisibility(View.VISIBLE);
-                            blackBg3.setText(getSizeStr(imgInfo.size, imgInfo.filePath));
-                        } else {
-                            cb3.setChecked(false);
-                            blackBg3.setVisibility(View.GONE);
-                        }
-                    } else {
-                        allCt3.setVisibility(View.INVISIBLE);
-                    }
-
-                    cb.setOnCheckedChangeListener(onCheck);
-                    cb2.setOnCheckedChangeListener(onCheck);
-                    cb3.setOnCheckedChangeListener(onCheck);
-
-                }
-
-                return view;
-            }
-
-            private View.OnClickListener onItemClick = new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    Object o = v.getTag();
-                    if (o instanceof String) {
-                        clickItemView = v;
-                        String path = (String) o;
-                        Intent intent = new Intent(ImagePickerPlusActivity.this, LargePreviewActivity.class);
-                        intent.putExtra("filePath", path);
-                        String orientation = (String) v.getTag(R.string.view_tag_key2);
-                        intent.putExtra("orientation", orientation);
-                        intent.putExtra("isJustPreview", false);
-                        startActivityForResult(intent, CODE_LARGE_PREVIEW);
-                    } else if (o instanceof Long) {
-                        clickAlbumId = (Long) o;
-                        isAlbumMode = !isAlbumMode;
-                        adapter.notifyDataSetChanged();
-                        if (!isAlbumMode) {
-                            lv.setSelection(0);
-                        }
-                    }
-                }
-            };
-
-            @Override
-            public long getItemId(int position) {
-                return 0;
-            }
-
-            @Override
-            public Object getItem(int position) {
-                return null;
-            }
-
-            @Override
-            public void notifyDataSetChanged() {
-                t.clearTaskAndCache();
-                if (isAlbumMode) {
-                    size = itemAlbumDatas.size();
-                } else {
-                    size = itemAlbumDatas.get(clickAlbumId).imageInfos.size();
-                }
-                super.notifyDataSetChanged();
-            }
-
-            @Override
-            public int getCount() {
-                if (size % 3 == 0) {
-                    return size / 3;
-                } else {
-                    return size / 3 + 1;
-                }
-            }
-
-        };
+        if (albumCursor != null) {
+            adapter = new MyCursorAdapter(this, albumCursor, false);
+        } else {
+            adapter = new MyBaseAdapter();
+        }
         lv.setAdapter(adapter);
+
+    }
+
+    class MyBaseAdapter extends BaseAdapter{
+        private int size = itemAlbumDatas.size();
+        private LayoutInflater layoutInfalter = getLayoutInflater();
+        @Override
+        public View getView(int position, View convertView, ViewGroup parent) {
+            View view = convertView;
+            if (view == null) {
+                view = layoutInfalter.inflate(R.layout.list_grid_item, parent, false);
+            }
+
+            ImageView imageView = (ImageView) view.findViewById(R.id.image_item);
+            ImageView imageView2 = (ImageView) view.findViewById(R.id.image_item_2);
+            ImageView imageView3 = (ImageView) view.findViewById(R.id.image_item_3);
+
+            setLayoutHeight(imageView);
+            setLayoutHeight(imageView2);
+            setLayoutHeight(imageView3);
+
+            TextView tv = (TextView) view.findViewById(R.id.tv_info);
+            TextView tv2 = (TextView) view.findViewById(R.id.tv_info2);
+            TextView tv_2 = (TextView) view.findViewById(R.id.tv_info_2);
+            TextView tv2_2 = (TextView) view.findViewById(R.id.tv_info2_2);
+            TextView tv_3 = (TextView) view.findViewById(R.id.tv_info_3);
+            TextView tv2_3 = (TextView) view.findViewById(R.id.tv_info2_3);
+
+            View bottomCt = view.findViewById(R.id.bottom_ct);
+            View bottomCt2 = view.findViewById(R.id.bottom_ct_2);
+            View bottomCt3 = view.findViewById(R.id.bottom_ct_3);
+
+            View allCt = view.findViewById(R.id.all_ct);
+            View allCt2 = view.findViewById(R.id.all_ct2);
+            View allCt3 = view.findViewById(R.id.all_ct3);
+
+            allCt.setOnClickListener(onItemClick);
+            allCt2.setOnClickListener(onItemClick);
+            allCt3.setOnClickListener(onItemClick);
+
+            CheckBox cb = (CheckBox) view.findViewById(R.id.checkbox);
+            CheckBox cb2 = (CheckBox) view.findViewById(R.id.checkbox_2);
+            CheckBox cb3 = (CheckBox) view.findViewById(R.id.checkbox_3);
+
+            TextView blackBg = (TextView) view.findViewById(R.id.tv_checked_bg);
+            TextView blackBg2 = (TextView) view.findViewById(R.id.tv_checked_bg2);
+            TextView blackBg3 = (TextView) view.findViewById(R.id.tv_checked_bg3);
+
+            cb.setTag(R.string.view_tag_key, blackBg);
+            cb2.setTag(R.string.view_tag_key, blackBg2);
+            cb3.setTag(R.string.view_tag_key, blackBg3);
+
+            allCt.setTag(R.string.view_tag_key, R.id.checkbox);
+            allCt2.setTag(R.string.view_tag_key, R.id.checkbox_2);
+            allCt3.setTag(R.string.view_tag_key, R.id.checkbox_3);
+
+            if (isAlbumMode) {
+
+                cb.setVisibility(View.GONE);
+                cb2.setVisibility(View.GONE);
+                cb3.setVisibility(View.GONE);
+
+                blackBg.setVisibility(View.GONE);
+                blackBg2.setVisibility(View.GONE);
+                blackBg3.setVisibility(View.GONE);
+
+                bottomCt.setVisibility(View.VISIBLE);
+                bottomCt2.setVisibility(View.VISIBLE);
+                bottomCt3.setVisibility(View.VISIBLE);
+
+                AlbumInfo albumInfo;
+                ItemImageInfo imgInfo;
+                int dataSize = itemAlbumDatas.size();
+
+                if (position * 3 < dataSize) {
+                    albumInfo = itemAlbumDatas.valueAt(position * 3);
+                    imgInfo = albumInfo.getConver();
+                    t.addTask(imgInfo.filePath, imageView, imgInfo.imageId, imgInfo.orientation);
+                    bottomCt.setVisibility(View.VISIBLE);
+                    tv.setText(albumInfo.albumName);
+                    tv2.setText("(" + albumInfo.photoCount + ")");
+                    if (albumInfo.choiceCount > 0) {
+                        blackBg.setText("已选" + albumInfo.choiceCount + "张");
+                        blackBg.setVisibility(View.VISIBLE);
+                    }
+                    allCt.setTag(albumInfo.albumId);
+                    allCt.setVisibility(View.VISIBLE);
+                } else {
+                    allCt.setVisibility(View.INVISIBLE);
+                }
+
+                if (position * 3 + 1 < dataSize) {
+                    albumInfo = itemAlbumDatas.valueAt(position * 3 + 1);
+                    imgInfo = albumInfo.getConver();
+                    t.addTask(imgInfo.filePath, imageView2, imgInfo.imageId, imgInfo.orientation);
+                    bottomCt2.setVisibility(View.VISIBLE);
+                    tv_2.setText(albumInfo.albumName);
+                    tv2_2.setText("(" + albumInfo.photoCount + ")");
+                    if (albumInfo.choiceCount > 0) {
+                        blackBg2.setText("已选" + albumInfo.choiceCount + "张");
+                        blackBg2.setVisibility(View.VISIBLE);
+                    }
+                    allCt2.setTag(albumInfo.albumId);
+                    allCt2.setVisibility(View.VISIBLE);
+                } else {
+                    allCt2.setVisibility(View.INVISIBLE);
+                }
+
+                if (position * 3 + 2 < dataSize) {
+                    albumInfo = itemAlbumDatas.valueAt(position * 3 + 2);
+                    imgInfo = albumInfo.getConver();
+                    t.addTask(imgInfo.filePath, imageView3, imgInfo.imageId, imgInfo.orientation);
+                    bottomCt3.setVisibility(View.VISIBLE);
+                    tv_3.setText(albumInfo.albumName);
+                    tv2_3.setText("(" + albumInfo.photoCount + ")");
+                    if (albumInfo.choiceCount > 0) {
+                        blackBg3.setText("已选" + albumInfo.choiceCount + "张");
+                        blackBg3.setVisibility(View.VISIBLE);
+                    }
+                    allCt3.setTag(albumInfo.albumId);
+                    allCt3.setVisibility(View.VISIBLE);
+                } else {
+                    allCt3.setVisibility(View.INVISIBLE);
+                }
+
+            } else {
+
+                cb.setVisibility(View.VISIBLE);
+                cb2.setVisibility(View.VISIBLE);
+                cb3.setVisibility(View.VISIBLE);
+
+                cb.setOnCheckedChangeListener(null);
+                cb2.setOnCheckedChangeListener(null);
+                cb3.setOnCheckedChangeListener(null);
+
+                bottomCt.setVisibility(View.GONE);
+                bottomCt2.setVisibility(View.GONE);
+                bottomCt3.setVisibility(View.GONE);
+
+                AlbumInfo albumInfo = itemAlbumDatas.get(clickAlbumId);
+                ItemImageInfo imgInfo;
+                int dataSize = albumInfo.size();
+
+                if (position * 3 < dataSize) {
+                    imgInfo = albumInfo.getImageInfoByIndex(position * 3);
+                    t.addTask(imgInfo.filePath, imageView, imgInfo.imageId, imgInfo.orientation);
+                    allCt.setVisibility(View.VISIBLE);
+                    allCt.setTag(imgInfo.filePath);
+                    allCt.setTag(R.string.view_tag_key2, imgInfo.orientation);
+                    cb.setTag(position * 3);
+                    if (imgInfo.isChecked) {
+                        cb.setChecked(true);
+                        blackBg.setVisibility(View.VISIBLE);
+                        blackBg.setText(getSizeStr(imgInfo.size, imgInfo.filePath));
+                    } else {
+                        cb.setChecked(false);
+                        blackBg.setVisibility(View.GONE);
+                    }
+                } else {
+                    allCt.setVisibility(View.INVISIBLE);
+                }
+
+                if (position * 3 + 1 < dataSize) {
+                    imgInfo = albumInfo.getImageInfoByIndex(position * 3 + 1);
+                    t.addTask(imgInfo.filePath, imageView2, imgInfo.imageId, imgInfo.orientation);
+                    allCt2.setVisibility(View.VISIBLE);
+                    allCt2.setTag(imgInfo.filePath);
+                    allCt2.setTag(R.string.view_tag_key2, imgInfo.orientation);
+                    cb2.setTag(position * 3 + 1);
+                    if (imgInfo.isChecked) {
+                        cb2.setChecked(true);
+                        blackBg2.setVisibility(View.VISIBLE);
+                        blackBg2.setText(getSizeStr(imgInfo.size, imgInfo.filePath));
+                    } else {
+                        cb2.setChecked(false);
+                        blackBg2.setVisibility(View.GONE);
+                    }
+                } else {
+                    allCt2.setVisibility(View.INVISIBLE);
+                }
+
+                if (position * 3 + 2 < dataSize) {
+                    imgInfo = albumInfo.getImageInfoByIndex(position * 3 + 2);
+                    t.addTask(imgInfo.filePath, imageView3, imgInfo.imageId, imgInfo.orientation);
+                    allCt3.setVisibility(View.VISIBLE);
+                    allCt3.setTag(imgInfo.filePath);
+                    allCt3.setTag(R.string.view_tag_key2, imgInfo.orientation);
+                    cb3.setTag(position * 3 + 2);
+                    if (imgInfo.isChecked) {
+                        cb3.setChecked(true);
+                        blackBg3.setVisibility(View.VISIBLE);
+                        blackBg3.setText(getSizeStr(imgInfo.size, imgInfo.filePath));
+                    } else {
+                        cb3.setChecked(false);
+                        blackBg3.setVisibility(View.GONE);
+                    }
+                } else {
+                    allCt3.setVisibility(View.INVISIBLE);
+                }
+
+                cb.setOnCheckedChangeListener(onCheck);
+                cb2.setOnCheckedChangeListener(onCheck);
+                cb3.setOnCheckedChangeListener(onCheck);
+
+            }
+
+            return view;
+        }
+        @Override
+        public long getItemId(int position) {
+            return 0;
+        }
+        @Override
+        public Object getItem(int position) {
+            return null;
+        }
+        @Override
+        public void notifyDataSetChanged() {
+            t.clearTaskAndCache();
+            if (isAlbumMode) {
+                size = itemAlbumDatas.size();
+            } else {
+                size = itemAlbumDatas.get(clickAlbumId).size();
+            }
+            super.notifyDataSetChanged();
+        }
+        @Override
+        public int getCount() {
+            if (size % 3 == 0) {
+                return size / 3;
+            } else {
+                return size / 3 + 1;
+            }
+        }
+    }
+
+    private View.OnClickListener onItemClick = new View.OnClickListener() {
+        @Override
+        public void onClick(View v) {
+            Object o = v.getTag();
+            if (o instanceof String) {
+                clickItemView = v;
+                String path = (String) o;
+                Intent intent = new Intent(ImagePickerPlusActivity.this, LargePreviewActivity.class);
+                intent.putExtra("filePath", path);
+                String orientation = (String) v.getTag(R.string.view_tag_key2);
+                intent.putExtra("orientation", orientation);
+                intent.putExtra("isJustPreview", false);
+                startActivityForResult(intent, CODE_LARGE_PREVIEW);
+            } else if (o instanceof Long) {
+                clickAlbumId = (Long) o;
+                isAlbumMode = !isAlbumMode;
+//                adapter.notifyDataSetChanged();
+                if(adapter instanceof  MyCursorAdapter){
+                    ((MyCursorAdapter)adapter).changeCursor(getCursor(clickAlbumId));
+                }else{
+                    adapter.notifyDataSetChanged();
+                }
+                if (!isAlbumMode) {
+                    lv.setSelection(0);
+                }
+            }
+        }
+    };
+
+    class MyCursorAdapter extends CursorAdapter {
+        int size;
+        LayoutInflater layoutInflater = getLayoutInflater();
+        AlbumInfo albumInfo;
+
+        public MyCursorAdapter(Context context, Cursor c, boolean autoRequery) {
+            super(context, c, autoRequery);
+            size = getCursor().getCount();
+        }
+
+        @Override
+        public View newView(Context context, Cursor cursor, ViewGroup parent) {
+            return layoutInflater.inflate(R.layout.list_grid_item, parent, false);
+        }
+
+        @Override
+        public void bindView(View view, Context context, Cursor cursor) {
+            ImageView imageView = (ImageView) view.findViewById(R.id.image_item);
+            ImageView imageView2 = (ImageView) view.findViewById(R.id.image_item_2);
+            ImageView imageView3 = (ImageView) view.findViewById(R.id.image_item_3);
+
+            setLayoutHeight(imageView);
+            setLayoutHeight(imageView2);
+            setLayoutHeight(imageView3);
+
+            TextView tv = (TextView) view.findViewById(R.id.tv_info);
+            TextView tv2 = (TextView) view.findViewById(R.id.tv_info2);
+            TextView tv_2 = (TextView) view.findViewById(R.id.tv_info_2);
+            TextView tv2_2 = (TextView) view.findViewById(R.id.tv_info2_2);
+            TextView tv_3 = (TextView) view.findViewById(R.id.tv_info_3);
+            TextView tv2_3 = (TextView) view.findViewById(R.id.tv_info2_3);
+
+            View bottomCt = view.findViewById(R.id.bottom_ct);
+            View bottomCt2 = view.findViewById(R.id.bottom_ct_2);
+            View bottomCt3 = view.findViewById(R.id.bottom_ct_3);
+
+            View allCt = view.findViewById(R.id.all_ct);
+            View allCt2 = view.findViewById(R.id.all_ct2);
+            View allCt3 = view.findViewById(R.id.all_ct3);
+
+            allCt.setOnClickListener(onItemClick);
+            allCt2.setOnClickListener(onItemClick);
+            allCt3.setOnClickListener(onItemClick);
+
+            CheckBox cb = (CheckBox) view.findViewById(R.id.checkbox);
+            CheckBox cb2 = (CheckBox) view.findViewById(R.id.checkbox_2);
+            CheckBox cb3 = (CheckBox) view.findViewById(R.id.checkbox_3);
+
+            TextView blackBg = (TextView) view.findViewById(R.id.tv_checked_bg);
+            TextView blackBg2 = (TextView) view.findViewById(R.id.tv_checked_bg2);
+            TextView blackBg3 = (TextView) view.findViewById(R.id.tv_checked_bg3);
+
+            cb.setTag(R.string.view_tag_key, blackBg);
+            cb2.setTag(R.string.view_tag_key, blackBg2);
+            cb3.setTag(R.string.view_tag_key, blackBg3);
+
+            allCt.setTag(R.string.view_tag_key, R.id.checkbox);
+            allCt2.setTag(R.string.view_tag_key, R.id.checkbox_2);
+            allCt3.setTag(R.string.view_tag_key, R.id.checkbox_3);
+
+            if (isAlbumMode) {
+
+                cb.setVisibility(View.GONE);
+                cb2.setVisibility(View.GONE);
+                cb3.setVisibility(View.GONE);
+
+                blackBg.setVisibility(View.GONE);
+                blackBg2.setVisibility(View.GONE);
+                blackBg3.setVisibility(View.GONE);
+
+                bottomCt.setVisibility(View.VISIBLE);
+                bottomCt2.setVisibility(View.VISIBLE);
+                bottomCt3.setVisibility(View.VISIBLE);
+
+                AlbumInfo albumInfo;
+                ItemImageInfo imgInfo;
+//                int dataSize = itemAlbumDatas.size();
+
+                if (currentPosition * 3 < size) {
+                    cursor.move(currentPosition*2);
+                    long albumId = cursor.getLong(3);
+                    albumInfo = itemAlbumDatas.get(albumId);
+                    if(albumInfo == null){
+                        albumInfo = new AlbumInfo();
+                        albumInfo.albumId = cursor.getLong(3);
+                        albumInfo.albumName = cursor.getString(4);
+                        albumInfo.photoCount = cursor.getInt(7);
+                        ItemImageInfo conver = new ItemImageInfo();
+                        conver.filePath = cursor.getString(2);
+                        conver.imageId = cursor.getLong(0);
+                        conver.orientation = new String(String.valueOf(cursor.getInt(6)));
+                        conver.size = cursor.getLong(1);
+                        albumInfo.setConver(conver);
+                        itemAlbumDatas.put(albumInfo.albumId, albumInfo);
+                    }
+//                    albumInfo = itemAlbumDatas.valueAt(currentPosition * 3);
+                    imgInfo = albumInfo.getConver();
+                    t.addTask(imgInfo.filePath, imageView, imgInfo.imageId, imgInfo.orientation);
+                    bottomCt.setVisibility(View.VISIBLE);
+                    tv.setText(albumInfo.albumName);
+                    tv2.setText("(" + albumInfo.photoCount + ")");
+                    if (albumInfo.choiceCount > 0) {
+                        blackBg.setText("已选" + albumInfo.choiceCount + "张");
+                        blackBg.setVisibility(View.VISIBLE);
+                    }
+                    allCt.setTag(albumInfo.albumId);
+                    allCt.setVisibility(View.VISIBLE);
+                } else {
+                    allCt.setVisibility(View.INVISIBLE);
+                }
+
+                if (currentPosition * 3 + 1 < size) {
+                    cursor.moveToNext();
+                    long albumId = cursor.getLong(3);
+                    albumInfo = itemAlbumDatas.get(albumId);
+                    if(albumInfo == null){
+                        albumInfo = new AlbumInfo();
+                        albumInfo.albumId = cursor.getLong(3);
+                        albumInfo.albumName = cursor.getString(4);
+                        albumInfo.photoCount = cursor.getInt(7);
+                        ItemImageInfo conver = new ItemImageInfo();
+                        conver.filePath = cursor.getString(2);
+                        conver.imageId = cursor.getLong(0);
+                        conver.orientation = new String(String.valueOf(cursor.getInt(6)));
+                        conver.size = cursor.getLong(1);
+                        albumInfo.setConver(conver);
+                        itemAlbumDatas.put(albumInfo.albumId, albumInfo);
+                    }
+//                    albumInfo = itemAlbumDatas.valueAt(currentPosition * 3 + 1);
+                    imgInfo = albumInfo.getConver();
+                    t.addTask(imgInfo.filePath, imageView2, imgInfo.imageId, imgInfo.orientation);
+                    bottomCt2.setVisibility(View.VISIBLE);
+                    tv_2.setText(albumInfo.albumName);
+                    tv2_2.setText("(" + albumInfo.photoCount + ")");
+                    if (albumInfo.choiceCount > 0) {
+                        blackBg2.setText("已选" + albumInfo.choiceCount + "张");
+                        blackBg2.setVisibility(View.VISIBLE);
+                    }
+                    allCt2.setTag(albumInfo.albumId);
+                    allCt2.setVisibility(View.VISIBLE);
+                } else {
+                    allCt2.setVisibility(View.INVISIBLE);
+                }
+
+                if (currentPosition * 3 + 2 < size) {
+                    cursor.moveToNext();
+                    long albumId = cursor.getLong(3);
+                    albumInfo = itemAlbumDatas.get(albumId);
+                    if(albumInfo == null){
+                        albumInfo = new AlbumInfo();
+                        albumInfo.albumId = cursor.getLong(3);
+                        albumInfo.albumName = cursor.getString(4);
+                        albumInfo.photoCount = cursor.getInt(7);
+                        ItemImageInfo conver = new ItemImageInfo();
+                        conver.filePath = cursor.getString(2);
+                        conver.imageId = cursor.getLong(0);
+                        conver.orientation = new String(String.valueOf(cursor.getInt(6)));
+                        conver.size = cursor.getLong(1);
+                        albumInfo.setConver(conver);
+                        itemAlbumDatas.put(albumInfo.albumId, albumInfo);
+                    }
+//                    albumInfo = itemAlbumDatas.valueAt(currentPosition * 3 + 2);
+                    imgInfo = albumInfo.getConver();
+                    t.addTask(imgInfo.filePath, imageView3, imgInfo.imageId, imgInfo.orientation);
+                    bottomCt3.setVisibility(View.VISIBLE);
+                    tv_3.setText(albumInfo.albumName);
+                    tv2_3.setText("(" + albumInfo.photoCount + ")");
+                    if (albumInfo.choiceCount > 0) {
+                        blackBg3.setText("已选" + albumInfo.choiceCount + "张");
+                        blackBg3.setVisibility(View.VISIBLE);
+                    }
+                    allCt3.setTag(albumInfo.albumId);
+                    allCt3.setVisibility(View.VISIBLE);
+                } else {
+                    allCt3.setVisibility(View.INVISIBLE);
+                }
+
+            } else {
+
+                LogUtil.i("getView", "p " + currentPosition);
+
+                if(albumInfo == null){
+                    albumInfo = itemAlbumDatas.get(clickAlbumId);
+                }
+                ItemImageInfo imgInfo;
+
+                cb.setVisibility(View.VISIBLE);
+                cb2.setVisibility(View.VISIBLE);
+                cb3.setVisibility(View.VISIBLE);
+
+                cb.setOnCheckedChangeListener(null);
+                cb2.setOnCheckedChangeListener(null);
+                cb3.setOnCheckedChangeListener(null);
+
+                bottomCt.setVisibility(View.GONE);
+                bottomCt2.setVisibility(View.GONE);
+                bottomCt3.setVisibility(View.GONE);
+
+                //{Media._ID, Media.SIZE, Media.DATA, Media.ORIENTATION};
+                if (currentPosition * 3 < size) {
+//                    cursor.move(currentPosition*3-currentPosition);
+                    cursor.move(currentPosition*2);
+                    long imgId = cursor.getLong(0);
+                    imgInfo = albumInfo.getImageInfoByKey(imgId);
+                    if(null == imgInfo){
+                        imgInfo = new ItemImageInfo();
+                        imgInfo.orientation = new String(String.valueOf(cursor.getInt(3)));
+                        imgInfo.size = cursor.getLong(1);
+                        imgInfo.imageId = imgId;
+                        imgInfo.filePath = cursor.getString(2);
+                        albumInfo.addImageInfo(imgInfo);
+                    }
+//                imgInfo = albumInfo.getImageInfos().get(currentPosition * 3);
+                    t.addTask(imgInfo.filePath, imageView, imgInfo.imageId, imgInfo.orientation);
+                    allCt.setVisibility(View.VISIBLE);
+                    allCt.setTag(imgInfo.filePath);
+                    allCt.setTag(R.string.view_tag_key2, imgInfo.orientation);
+                    cb.setTag(currentPosition * 3);
+                    if (imgInfo.isChecked) {
+                        cb.setChecked(true);
+                        blackBg.setVisibility(View.VISIBLE);
+                        blackBg.setText(getSizeStr(imgInfo.size, imgInfo.filePath));
+                    } else {
+                        cb.setChecked(false);
+                        blackBg.setVisibility(View.GONE);
+                    }
+                } else {
+                    allCt.setVisibility(View.INVISIBLE);
+                }
+
+                if (currentPosition * 3 + 1 < size) {
+                    cursor.moveToNext();
+                    long imgId = cursor.getLong(0);
+                    imgInfo = albumInfo.getImageInfoByKey(imgId);
+                    if(null == imgInfo){
+                        imgInfo = new ItemImageInfo();
+                        imgInfo.orientation = new String(String.valueOf(cursor.getInt(3)));
+                        imgInfo.size = cursor.getLong(1);
+                        imgInfo.imageId = imgId;
+                        imgInfo.filePath = cursor.getString(2);
+                        albumInfo.addImageInfo(imgInfo);
+                    }
+//                imgInfo = albumInfo.getImageInfos().get(currentPosition * 3 + 1);
+                    t.addTask(imgInfo.filePath, imageView2, imgInfo.imageId, imgInfo.orientation);
+                    allCt2.setVisibility(View.VISIBLE);
+                    allCt2.setTag(imgInfo.filePath);
+                    allCt2.setTag(R.string.view_tag_key2, imgInfo.orientation);
+                    cb2.setTag(currentPosition * 3 + 1);
+                    if (imgInfo.isChecked) {
+                        cb2.setChecked(true);
+                        blackBg2.setVisibility(View.VISIBLE);
+                        blackBg2.setText(getSizeStr(imgInfo.size, imgInfo.filePath));
+                    } else {
+                        cb2.setChecked(false);
+                        blackBg2.setVisibility(View.GONE);
+                    }
+                } else {
+                    allCt2.setVisibility(View.INVISIBLE);
+                }
+
+                if (currentPosition * 3 + 2 < size) {
+                    cursor.moveToNext();
+                    long imgId = cursor.getLong(0);
+                    imgInfo = albumInfo.getImageInfoByKey(imgId);
+                    if(null == imgInfo){
+                        imgInfo = new ItemImageInfo();
+                        imgInfo.orientation = new String(String.valueOf(cursor.getInt(3)));
+                        imgInfo.size = cursor.getLong(1);
+                        imgInfo.imageId = imgId;
+                        imgInfo.filePath = cursor.getString(2);
+                        albumInfo.addImageInfo(imgInfo);
+                    }
+//                imgInfo = albumInfo.getImageInfos().get(currentPosition * 3 + 2);
+                    t.addTask(imgInfo.filePath, imageView3, imgInfo.imageId, imgInfo.orientation);
+                    allCt3.setVisibility(View.VISIBLE);
+                    allCt3.setTag(imgInfo.filePath);
+                    allCt3.setTag(R.string.view_tag_key2, imgInfo.orientation);
+                    cb3.setTag(currentPosition * 3 + 2);
+                    if (imgInfo.isChecked) {
+                        cb3.setChecked(true);
+                        blackBg3.setVisibility(View.VISIBLE);
+                        blackBg3.setText(getSizeStr(imgInfo.size, imgInfo.filePath));
+                    } else {
+                        cb3.setChecked(false);
+                        blackBg3.setVisibility(View.GONE);
+                    }
+                } else {
+                    allCt3.setVisibility(View.INVISIBLE);
+                }
+
+                cb.setOnCheckedChangeListener(onCheck);
+                cb2.setOnCheckedChangeListener(onCheck);
+                cb3.setOnCheckedChangeListener(onCheck);
+
+            }
+        }
+
+        @Override
+        public void notifyDataSetChanged() {
+            LogUtil.i("c", "notifyDataSetChanged");
+            albumInfo = null;
+            size = getCursor().getCount();
+            super.notifyDataSetChanged();
+        }
+
+        @Override
+        public int getCount() {
+            if (size % 3 == 0) {
+                return size / 3;
+            } else {
+                return size / 3 + 1;
+            }
+        }
+
+        int currentPosition;
+
+        @Override
+        public View getView(int position, View convertView, ViewGroup parent) {
+            currentPosition = position;
+            return super.getView(position, convertView, parent);
+        }
+
+        @Override
+        public void changeCursor(Cursor cursor) {
+            LogUtil.i("c", "changeCursor");
+            super.changeCursor(cursor);
+        }
 
     }
 
@@ -491,9 +853,9 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
         }
     }
 
-    public static String getSizeStr(long size, String filePath){
+    public static String getSizeStr(long size, String filePath) {
         String value = getSizeStr(size);
-        if(TextUtils.isEmpty(value) && !TextUtils.isEmpty(filePath)){
+        if (TextUtils.isEmpty(value) && !TextUtils.isEmpty(filePath)) {
             value = getSizeStr(new File(filePath).length());
         }
         return value;
@@ -512,7 +874,7 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
             Integer position = (Integer) buttonView.getTag();
             if (null != position) {
                 AlbumInfo albumInfo = itemAlbumDatas.get(clickAlbumId);
-                ItemImageInfo imgItemInfo = albumInfo.imageInfos.get(position);
+                ItemImageInfo imgItemInfo = albumInfo.getImageInfoByIndex(position);
                 TextView tvBg = (TextView) buttonView.getTag(R.string.view_tag_key);
                 if (isChecked) {
                     tvBg.setVisibility(View.VISIBLE);
@@ -591,7 +953,7 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
         public void addTask(String filePath, ImageView imgView, Long imgId, String orientation) {
             if (imgView != null) {
                 synchronized (imgView) {
-                    if(null != filePath && null != imgId && null != orientation){
+                    if (null != filePath && null != imgId && null != orientation) {
                         imgView.setTag(imgId);
                         imgView.setTag(R.string.view_tag_key, filePath);
                         imgView.setTag(R.string.view_tag_key2, orientation);
@@ -631,7 +993,7 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
                     if (b == null) { //get mini from system diskcache
                         b = getSystemMiniFromSystemDiskCache(imgId);
                     }
-                    if(b == null){ //my mini from my diskcache
+                    if (b == null) { //my mini from my diskcache
                         b = getMyMiniFromMyDiskCache(tagFilePath);
                     }
                     //my mini from system ori and save to my diskcache
@@ -654,8 +1016,8 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
                                 b = Bitmap.createBitmap(b, 0, 0, b.getWidth(), b.getHeight(), matrix, false);
                             }
                             bundle.putParcelable("bitmap", b);
-                        } catch (NumberFormatException e) {
-                            e.printStackTrace();
+                        } catch (Exception e) {
+                            LogUtil.e(TAG, "get orientation error", e);
                         }
                     } else {
                         LogUtil.e(TAG, "get small bitmap fail ! " + b);
@@ -668,11 +1030,11 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
             clearTaskAndCache();
         }
 
-        private Bitmap getSystemMiniFromSystemDiskCache(long imgId){
+        private Bitmap getSystemMiniFromSystemDiskCache(long imgId) {
             String thumbnailFilePath = thumbnailsMap.get(imgId);
             if (!TextUtils.isEmpty(thumbnailFilePath)) {
                 File miniFile = new File(thumbnailFilePath);
-                if(miniFile.exists() && miniFile.length() > 0){
+                if (miniFile.exists() && miniFile.length() > 0) {
                     options.inSampleSize = 1;
                     options.inJustDecodeBounds = true;
                     BitmapFactory.decodeFile(thumbnailFilePath, options);
@@ -682,7 +1044,7 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
                     }
                     options.inJustDecodeBounds = false;
                     return BitmapUtil.getBitmap(thumbnailFilePath, options);
-                }else{
+                } else {
                     LogUtil.w(TAG, "1.mini file is not exists");
                 }
             } else {
@@ -691,12 +1053,12 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
             return null;
         }
 
-        private Bitmap getMyMiniFromMyDiskCache(String oriFilePath){
-            if(!TextUtils.isEmpty(diskCachePath) && !TextUtils.isEmpty(oriFilePath)){
+        private Bitmap getMyMiniFromMyDiskCache(String oriFilePath) {
+            if (!TextUtils.isEmpty(diskCachePath) && !TextUtils.isEmpty(oriFilePath)) {
                 Bitmap b = BitmapUtil.getBitmap(new File(diskCachePath, new File(oriFilePath).getName().split("\\.")[0]).getAbsolutePath());
-                if(b == null){
+                if (b == null) {
                     LogUtil.w(TAG, "2.get my mini from my diskcache fail.");
-                }else{
+                } else {
                     LogUtil.i(TAG, "2.get my mini from my diskcache succ.");
                 }
                 return b;
@@ -704,7 +1066,7 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
             return null;
         }
 
-        private Bitmap getSystemMiniFromSystem(long imgId){
+        private Bitmap getSystemMiniFromSystem(long imgId) {
             options.inSampleSize = 1;
             options.inJustDecodeBounds = true;
             Thumbnails.getThumbnail(getContentResolver(), imgId,
@@ -715,17 +1077,17 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
             }
             options.inJustDecodeBounds = false;
             Bitmap bm = Thumbnails.getThumbnail(getContentResolver(), imgId, Thumbnails.MINI_KIND, options);
-            if(bm != null && TextUtils.isEmpty(thumbnailsMap.get(imgId))){
+            if (bm != null && TextUtils.isEmpty(thumbnailsMap.get(imgId))) {
                 LogUtil.i(TAG, "4.gen mini and save path.");
                 Cursor c = Thumbnails.queryMiniThumbnail(getContentResolver(), imgId, Thumbnails.MINI_KIND, new String[]{Thumbnails._ID, Thumbnails.DATA});
-                if(null != c){
-                    if(c.moveToFirst()){
+                if (null != c) {
+                    if (c.moveToFirst()) {
                         thumbnailsMap.put(imgId, c.getString(1));
-                    }else{
+                    } else {
                         LogUtil.e(TAG, "4.query mini path fail !");
                     }
                     c.close();
-                }else{
+                } else {
                     LogUtil.e(TAG, "4.query mini cursor is null");
                 }
             }
@@ -737,8 +1099,8 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
                 options.inJustDecodeBounds = true;
                 options.inSampleSize = 1;
                 BitmapFactory.decodeFile(filePath, options);
-                if(options.outWidth*options.outHeight >= 1600 * 1200){
-                    if(TextUtils.isEmpty(diskCachePath)){
+                if (options.outWidth * options.outHeight >= 1600 * 1200) {
+                    if (TextUtils.isEmpty(diskCachePath)) {
                         return null;
                     }
                 }
@@ -748,25 +1110,25 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
                 }
                 options.inJustDecodeBounds = false;
                 Bitmap bm = BitmapUtil.getBitmap(filePath, options);
-                if(null != bm){
+                if (null != bm) {
                     FileOutputStream fos = null;
                     try {
                         LogUtil.i(TAG, "mini from ori saving to diskcache");
                         fos = new FileOutputStream(new File(diskCachePath, new File(filePath).getName().split("\\.")[0]));
                         bm.compress(Bitmap.CompressFormat.JPEG, 100, fos);
-                    } catch (FileNotFoundException e) {
-                        e.printStackTrace();
+                    } catch (Exception e) {
+                        LogUtil.e(TAG, "mini from ori saving to diskcache fail !", e);
                     } finally {
-                        if(null != fos){
+                        if (null != fos) {
                             try {
                                 fos.close();
-                            } catch (IOException e) {
-                                e.printStackTrace();
+                            } catch (Exception e) {
+                                LogUtil.e(TAG, "close resource fail !", e);
                             }
                         }
                     }
                 }
-                if(bm == null){
+                if (bm == null) {
                     LogUtil.w(TAG, "3.ori file maybe too big");
                 }
                 return bm;
@@ -778,16 +1140,40 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
 
     }
 
-    private LongSparseArray<AlbumInfo> getAdapterDatas() {
+    private Cursor getCursor(long albumId) {
+        String[] projection = {Media._ID, Media.SIZE, Media.DATA, Media.ORIENTATION};
+        Cursor cursor = getContentResolver().query(Media.EXTERNAL_CONTENT_URI,
+                projection,
+                Media.BUCKET_ID + "=?",
+                new String[]{String.valueOf(albumId)},
+                Media.DATE_ADDED + " DESC");
+        return cursor;
+    }
+
+    private Cursor getAdapterDatas() throws Exception {
+        String[] projection = {Media._ID, Media.SIZE, Media.DATA, Media.BUCKET_ID, Media.BUCKET_DISPLAY_NAME,
+                Media.DISPLAY_NAME, Media.ORIENTATION, "COUNT(0) AS count"};
+        Cursor cursor = getContentResolver().query(Media.EXTERNAL_CONTENT_URI,
+                projection,
+                "0==0) GROUP BY (" + Media.BUCKET_ID,
+                null,
+                Media.DATE_ADDED + " DESC");
+        return cursor;
+    }
+
+    private LongSparseArray<AlbumInfo> getAdapterDatas2() {
         LongSparseArray<AlbumInfo> itemAlbumDatas = new LongSparseArray<AlbumInfo>();
-        String[] projection2 = {Media._ID, Media.SIZE, Media.DATA, Media.BUCKET_ID, Media.BUCKET_DISPLAY_NAME,
+        String[] projection = {Media._ID, Media.SIZE, Media.DATA, Media.BUCKET_ID, Media.BUCKET_DISPLAY_NAME,
                 Media.DISPLAY_NAME, Media.ORIENTATION};
-        Cursor cursor2 = getContentResolver().query(Media.EXTERNAL_CONTENT_URI, projection2, null,
-                null, Media.DATE_TAKEN + " DESC, " + Media._ID + " DESC");
+        Cursor cursor2 = getContentResolver().query(Media.EXTERNAL_CONTENT_URI,
+                projection,
+                null,
+                null,
+                Media.DATE_ADDED + " DESC");
         String filePath;
         while (cursor2.moveToNext()) {
             filePath = cursor2.getString(2);
-            if(!new File(filePath).exists()){
+            if (!new File(filePath).exists()) {
                 continue;
             }
             long Media_BUCKET_ID = cursor2.getLong(3);
@@ -803,10 +1189,8 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
             imageInfo.size = cursor2.getLong(1);
             imageInfo.filePath = filePath;
             imageInfo.orientation = new String(String.valueOf(cursor2.getInt(6)));
-
             albumInfo.photoCount++;
-            albumInfo.imageInfos.add(imageInfo);
-
+            albumInfo.addImageInfo(imageInfo);
         }
         cursor2.close();
         return itemAlbumDatas;
