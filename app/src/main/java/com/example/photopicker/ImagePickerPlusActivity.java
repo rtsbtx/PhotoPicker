@@ -1150,7 +1150,7 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
                 projection,
                 Media.BUCKET_ID + "=?",
                 new String[]{String.valueOf(albumId)},
-                Media.DATE_ADDED + " DESC");
+                Media.DATE_MODIFIED + " DESC, " + Media.DATE_ADDED + " DESC, " + Media._ID + " DESC");
         return cursor;
     }
 
@@ -1161,7 +1161,7 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
                 projection,
                 "0==0) GROUP BY (" + Media.BUCKET_ID,
                 null,
-                Media.DATE_ADDED + " DESC");
+                Media.DATE_MODIFIED + " DESC, " + Media.DATE_ADDED + " DESC, " + Media._ID + " DESC");
         return cursor;
     }
 
@@ -1173,7 +1173,7 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
                 projection,
                 null,
                 null,
-                Media.DATE_ADDED + " DESC");
+                Media.DATE_MODIFIED + " DESC, " + Media.DATE_ADDED + " DESC, " + Media._ID + " DESC");
         String filePath;
         while (cursor2.moveToNext()) {
             filePath = cursor2.getString(2);
