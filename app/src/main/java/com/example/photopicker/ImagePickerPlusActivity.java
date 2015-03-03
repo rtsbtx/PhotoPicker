@@ -122,7 +122,11 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
     @Override
     protected void onDestroy() {
         flag = false;
-//        getSupportLoaderManager().destroyLoader(0);
+        if(adapter instanceof MyCursorAdapter){
+            if(!((MyCursorAdapter)adapter).getCursor().isClosed()){
+                ((MyCursorAdapter)adapter).getCursor().close();
+            }
+        }
         System.gc();
         super.onDestroy();
     }
