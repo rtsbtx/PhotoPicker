@@ -40,9 +40,9 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
     public static final String EXTRA_PICK_PHOTO_COUNT = "extra_pick_photo_count";
     public static final String EXTRA_DISK_CACHE_PATH = "extra_disk_cache_path";
 
-    public static final String EXTRA_PICK_RETURN_DATA_PATHS = "photoPaths";
-    public static final String EXTRA_PICK_RETURN_DATA_IDS = "photoIds";
-    public static final String EXTRA_PICK_RETURN_DATA_ORIENTATIONS = "photoOrientations";
+    public static final String EXTRA_PICK_RETURN_DATA = "data";
+//    public static final String EXTRA_PICK_RETURN_DATA_IDS = "photoIds";
+//    public static final String EXTRA_PICK_RETURN_DATA_ORIENTATIONS = "photoOrientations";
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
@@ -79,10 +79,7 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
             }
             return true;
         } else if (id == R.id.action_finish) {
-            setResult(RESULT_OK, new Intent()
-                    .putStringArrayListExtra(EXTRA_PICK_RETURN_DATA_PATHS, choicePhotoPaths)
-                    .putStringArrayListExtra(EXTRA_PICK_RETURN_DATA_IDS, choicePhotoIds)
-                    .putStringArrayListExtra(EXTRA_PICK_RETURN_DATA_ORIENTATIONS, choicePhotoOrientations));
+            setResult(RESULT_OK, new Intent().putExtra(EXTRA_PICK_RETURN_DATA, datas));
             finish();
             return true;
         }
@@ -106,8 +103,9 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
     private Handler mHandler;
 
     private ArrayList<String> choicePhotoPaths = new ArrayList<>();
-    private ArrayList<String> choicePhotoIds = new ArrayList<>();
-    private ArrayList<String> choicePhotoOrientations = new ArrayList<>();
+    private ArrayList<ItemImageInfo> datas = new ArrayList<>();
+//    private ArrayList<String> choicePhotoIds = new ArrayList<>();
+//    private ArrayList<String> choicePhotoOrientations = new ArrayList<>();
 
     private int CAN_CHECK_COUNT;
     private LongSparseArray<AlbumInfo> itemAlbumDatas;
@@ -884,14 +882,16 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
                     tvBg.setVisibility(View.VISIBLE);
                     tvBg.setText(getSizeStr(imgItemInfo.size, imgItemInfo.filePath));
                     choicePhotoPaths.add(imgItemInfo.filePath);
-                    choicePhotoIds.add(String.valueOf(imgItemInfo.imageId));
-                    choicePhotoOrientations.add(imgItemInfo.orientation);
+//                    choicePhotoIds.add(String.valueOf(imgItemInfo.imageId));
+//                    choicePhotoOrientations.add(imgItemInfo.orientation);
+                    datas.add(imgItemInfo);
                     albumInfo.choiceCount++;
                 } else {
                     tvBg.setVisibility(View.GONE);
                     choicePhotoPaths.remove(imgItemInfo.filePath);
-                    choicePhotoIds.remove(String.valueOf(imgItemInfo.imageId));
-                    choicePhotoOrientations.remove(imgItemInfo.orientation);
+//                    choicePhotoIds.remove(String.valueOf(imgItemInfo.imageId));
+//                    choicePhotoOrientations.remove(imgItemInfo.orientation);
+                    datas.remove(imgItemInfo);
                     albumInfo.choiceCount--;
                 }
                 menuItem.setTitle("完成 (" + choicePhotoPaths.size() + "/" + CAN_CHECK_COUNT + ")");
@@ -1192,7 +1192,7 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
             imageInfo.imageId = cursor2.getLong(0);
             imageInfo.size = cursor2.getLong(1);
             imageInfo.filePath = filePath;
-            imageInfo.orientation = new String(String.valueOf(cursor2.getInt(6)));
+            imageInfo.orientation = String.valueOf(cursor2.getInt(6));
             albumInfo.photoCount++;
             albumInfo.addImageInfo(imageInfo);
         }

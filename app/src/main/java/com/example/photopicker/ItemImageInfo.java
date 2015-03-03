@@ -1,11 +1,13 @@
 package com.example.photopicker;
 
-public class ItemImageInfo {
+import java.io.Serializable;
+
+public class ItemImageInfo implements Serializable {
 
 	public long imageId;
 	public String filePath;
 	public long size;
-    public String orientation; //必须是String类型，Integer不行
+    public String orientation;
 	
 	public boolean isChecked = false;
 

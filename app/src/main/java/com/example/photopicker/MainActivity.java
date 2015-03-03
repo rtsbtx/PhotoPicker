@@ -32,9 +32,7 @@ public class MainActivity extends ActionBarActivity {
         switch (requestCode) {
             case 1:
                 if (resultCode == RESULT_OK) {
-                    ArrayList<String> photoIds = data.getStringArrayListExtra(ImagePickerPlusActivity.EXTRA_PICK_RETURN_DATA_IDS);
-                    ArrayList<String> photoFilePaths = data.getStringArrayListExtra(ImagePickerPlusActivity.EXTRA_PICK_RETURN_DATA_PATHS);
-                    ArrayList<String> photoOrientations = data.getStringArrayListExtra(ImagePickerPlusActivity.EXTRA_PICK_RETURN_DATA_ORIENTATIONS);
+                    ArrayList<ItemImageInfo> datas = (ArrayList)data.getSerializableExtra(ImagePickerPlusActivity.EXTRA_PICK_RETURN_DATA);
                 }
                 break;
         }
