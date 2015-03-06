@@ -67,7 +67,7 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
 //            adapter.notifyDataSetChanged();
             if(adapter instanceof  MyCursorAdapter){
                 try {
-                    ((MyCursorAdapter)adapter).changeCursor(getAdapterDatas());
+                    ((MyCursorAdapter)adapter).changeCursor(getAlbumnAdapterDatas());
                 } catch (Exception e) {
                     LogUtil.e(TAG, "unknow.", e);
                 }
@@ -141,7 +141,7 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
 //            adapter.notifyDataSetChanged();
             if(adapter instanceof  MyCursorAdapter){
                 try {
-                    ((MyCursorAdapter)adapter).changeCursor(getAdapterDatas());
+                    ((MyCursorAdapter)adapter).changeCursor(getAlbumnAdapterDatas());
                 } catch (Exception e) {
                     LogUtil.e(TAG, "unknow.", e);
                 }
@@ -200,11 +200,11 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
 
         Cursor albumCursor = null;
         try {
-            albumCursor = getAdapterDatas();
+            albumCursor = getAlbumnAdapterDatas();
             itemAlbumDatas = new LongSparseArray<>();
         } catch (Exception e) {
-            LogUtil.w(TAG, "getAdapterDatas() SQL inject maybe fail ! getDataFrom getAdapterDatas2()", e);
-            itemAlbumDatas = getAdapterDatas2();
+            LogUtil.w(TAG, "getAdapterDatas() SQL inject maybe fail ! getDataFrom getAllAdapterDatas()", e);
+            itemAlbumDatas = getAllAdapterDatas();
         }
 
         lv = (ListView) findViewById(R.id.list_view);
@@ -494,7 +494,7 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
                 isAlbumMode = !isAlbumMode;
 //                adapter.notifyDataSetChanged();
                 if(adapter instanceof  MyCursorAdapter){
-                    ((MyCursorAdapter)adapter).changeCursor(getCursor(clickAlbumId));
+                    ((MyCursorAdapter)adapter).changeCursor(getPhotoInfoCursorByAlbumId(clickAlbumId));
                 }else{
                     adapter.notifyDataSetChanged();
                 }
@@ -1144,7 +1144,7 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
 
     }
 
-    private Cursor getCursor(long albumId) {
+    private Cursor getPhotoInfoCursorByAlbumId(long albumId) {
         String[] projection = {Media._ID, Media.SIZE, Media.DATA, Media.ORIENTATION};
         Cursor cursor = getContentResolver().query(Media.EXTERNAL_CONTENT_URI,
                 projection,
@@ -1154,7 +1154,7 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
         return cursor;
     }
 
-    private Cursor getAdapterDatas() throws Exception {
+    private Cursor getAlbumnAdapterDatas() throws Exception {
         String[] projection = {Media._ID, Media.SIZE, Media.DATA, Media.BUCKET_ID, Media.BUCKET_DISPLAY_NAME,
                 Media.DISPLAY_NAME, Media.ORIENTATION, "COUNT(0) AS count"};
         Cursor cursor = getContentResolver().query(Media.EXTERNAL_CONTENT_URI,
@@ -1165,7 +1165,7 @@ public class ImagePickerPlusActivity extends ActionBarActivity {
         return cursor;
     }
 
-    private LongSparseArray<AlbumInfo> getAdapterDatas2() {
+    private LongSparseArray<AlbumInfo> getAllAdapterDatas() {
         LongSparseArray<AlbumInfo> itemAlbumDatas = new LongSparseArray<AlbumInfo>();
         String[] projection = {Media._ID, Media.SIZE, Media.DATA, Media.BUCKET_ID, Media.BUCKET_DISPLAY_NAME,
                 Media.DISPLAY_NAME, Media.ORIENTATION};
