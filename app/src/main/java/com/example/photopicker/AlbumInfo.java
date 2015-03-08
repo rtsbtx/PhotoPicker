@@ -2,6 +2,8 @@ package com.example.photopicker;
 
 import android.support.v4.util.LongSparseArray;
 
+import java.util.ArrayList;
+
 public class AlbumInfo {
 
 	public long albumId;
@@ -28,13 +30,20 @@ public class AlbumInfo {
     }
 	
 	private LongSparseArray<ItemImageInfo> imageInfos = new LongSparseArray<ItemImageInfo>();
+    private ArrayList<Long> indexs = new ArrayList<>();
 
     public void addImageInfo(ItemImageInfo itemImageInfo){
         this.imageInfos.put(itemImageInfo.imageId, itemImageInfo);
+        this.indexs.add(itemImageInfo.imageId);
     }
 
     public ItemImageInfo getImageInfoByIndex(int index){
-        return this.imageInfos.valueAt(index);
+        try {
+            return this.imageInfos.get(indexs.get(index));
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
     }
 
     public ItemImageInfo getImageInfoByKey(long key){
